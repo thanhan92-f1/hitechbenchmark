@@ -32,7 +32,7 @@
 ## XV. Advanced Features
 
 ### 1. AI Performance Analysis ⭐
-**Status:** 🔲  
+**Status:** ✅  
 **Description:** Integrate Claude API to analyze benchmark results and provide natural language feedback.
 
 - [ ] Call Claude API with benchmark metrics as context
@@ -128,7 +128,7 @@ Advanced enhancements:
 ---
 
 ### 7. Historical Monitoring
-**Status:** 🔲  
+**Status:** ✅  
 
 - [ ] `MonitoredServer` model — user registers a VPS for periodic benchmarking
 - [ ] Cron benchmarks: daily / weekly / monthly
@@ -347,7 +347,7 @@ Enhancements:
 ---
 
 ### 23. Benchmark Certificate ⭐
-**Status:** 🔲  
+**Status:** ✅  
 
 - [ ] PDF certificate generation (using `@react-pdf/renderer` or Puppeteer)
 - [ ] Certificate includes: hostname, scores, date, UUID QR code
@@ -477,7 +477,7 @@ Enhancements:
 ---
 
 ### 33. Auto Issue Detection ⭐
-**Status:** 🔲  
+**Status:** ✅  
 
 - [ ] Disk throttling: detect if fio throughput drops significantly mid-test
 - [ ] CPU steal: detect via `/proc/stat` steal time
@@ -642,14 +642,14 @@ Remaining:
 - [x] Admin panel
 - [x] OAuth login (Google + GitHub)
 
-### Phase 2 — Intelligence ⭐ NEXT
-- [ ] AI Performance Analysis (#1) — Claude API
-- [ ] Advanced Network Analysis (#14)
-- [ ] Auto Issue Detection (#33)
-- [ ] Security Audit enhancement (#16)
+### Phase 2 — Intelligence ✅ IN PROGRESS
+- [x] AI Performance Analysis (#1) — Claude Haiku API + AiAnalysisJob + benchmark detail display
+- [x] Auto Issue Detection (#33) — IssueDetectionJob (CPU steal, disk throttle, RAM, network issues)
+- [x] Historical Monitoring (#7) — MonitoredServer/MonitoringResult schema + dashboard + API
+- [x] Benchmark Certificate/PDF (#23) — /verify/[uuid] printable certificate page
+- [x] Advanced Network Analysis (#14) — NetworkAnalysis component + /api/benchmarks/[uuid]/network-analysis
+- [x] Security Audit enhancement (#16) — SecurityAudit component with port risk/SSH/firewall analysis
 - [ ] Smart Scoring Engine enhancement (#32)
-- [ ] Historical Monitoring (#7)
-- [ ] Benchmark Certificate/PDF (#23)
 
 ### Phase 3 — Scale
 - [ ] Realtime Live Benchmark (#2)

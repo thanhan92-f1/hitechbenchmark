@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-function all(html: string, attr: string, tag = 'meta') {
+function all(html: string, tag = 'meta') {
   const results: Record<string, string> = {}
   const re = new RegExp(`<${tag}([^>]+)>`, 'gi')
   let m: RegExpExecArray | null

@@ -51,7 +51,6 @@ export function NetworkSpeedChart({ locations, className }: NetworkSpeedChartPro
       bar: {
         borderRadius: 4,
         columnWidth: '70%',
-        grouped: true,
       },
     },
     dataLabels: { enabled: false },

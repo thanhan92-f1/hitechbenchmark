@@ -4,10 +4,11 @@ import { db } from '@/lib/db'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { BenchmarkCard } from '@/components/benchmark/BenchmarkCard'
-import { Key, Server } from 'lucide-react'
+import { Key, Server, Activity } from 'lucide-react'
 import { VisibilityToggle } from '@/components/dashboard/VisibilityToggle'
 import { ApiTokenManager } from '@/components/dashboard/ApiTokenManager'
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 export const metadata: Metadata = {
   title: 'Dashboard',
@@ -96,6 +97,25 @@ export default async function DashboardPage() {
             </CardBody>
           </Card>
         )}
+      </section>
+
+      {/* Historical Monitoring */}
+      <section className="mb-10">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Activity className="w-5 h-5 text-blue-600" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Historical Monitoring</h2>
+          </div>
+          <Link href="/dashboard/monitoring" className="text-sm text-blue-600 hover:underline">
+            Manage →
+          </Link>
+        </div>
+        <Card>
+          <CardBody className="text-sm text-gray-500 dark:text-gray-400">
+            Track your VPS performance over time with scheduled benchmarks.{' '}
+            <Link href="/dashboard/monitoring" className="text-blue-600 hover:underline">Set up monitoring →</Link>
+          </CardBody>
+        </Card>
       </section>
 
       {/* API Tokens */}

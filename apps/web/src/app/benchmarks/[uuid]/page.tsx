@@ -6,11 +6,16 @@ import {
   formatScore, formatDate, getScoreColor, cn
 } from '@/lib/utils'
 import type { Metadata } from 'next'
-import { Cpu, HardDrive, MemoryStick, Globe, Shield, Server } from 'lucide-react'
+import { Cpu, HardDrive, MemoryStick, Globe, Shield, Server, Brain, AlertTriangle, CheckCircle, ExternalLink } from 'lucide-react'
 import { ShareCopy } from '@/components/benchmark/ShareCopy'
 import { ExportJsonButton } from '@/components/benchmark/ExportButton'
 import { NetworkSpeedChart } from '@/components/charts/NetworkSpeedChart'
 import { ScoreRadarChart } from '@/components/charts/ScoreRadarChart'
+import { NetworkAnalysis } from '@/components/benchmark/NetworkAnalysis'
+import { SecurityAudit } from '@/components/benchmark/SecurityAudit'
+import type { AiAnalysis, PerformanceIssue } from '@/lib/ai-analysis'
+import { TIER_META, ISSUE_SEVERITY_META } from '@/lib/ai-analysis'
+import Link from 'next/link'
 
 async function getBenchmark(uuid: string) {
   try {
@@ -89,6 +94,8 @@ export default async function BenchmarkDetailPage({
   }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || ''
+  const aiAnalysis = b.aiAnalysis as AiAnalysis | null
+  const detectedIssues = (b.detectedIssues as PerformanceIssue[] | null) ?? []
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -343,6 +350,180 @@ export default async function BenchmarkDetailPage({
           </CardBody>
         </Card>
       )}
+
+      {/* Network Quality Analysis */}
+      {b.locations?.length > 0 && (
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Globe className="w-4 h-4 text-blue-600" />
+              <h2 className="font-semibold text-gray-900 dark:text-white">Network Quality Analysis</h2>
+            </div>
+          </CardHeader>
+          <CardBody>
+            <NetworkAnalysis uuid={uuid} />
+          </CardBody>
+        </Card>
+      )}
+
+      {/* Security Audit */}
+      <Card className="mt-6">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-red-600" />
+            <h2 className="font-semibold text-gray-900 dark:text-white">Security Audit</h2>
+          </div>
+        </CardHeader>
+        <CardBody>
+          <SecurityAudit
+            securityData={b.rawPayload?.security}
+            openPorts={b.rawPayload?.open_ports}
+          />
+        </CardBody>
+      </Card>
+
+      {/* Detected Performance Issues */}
+      {detectedIssues.length > 0 && (
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-yellow-600" />
+              <h2 className="font-semibold text-gray-900 dark:text-white">Detected Issues</h2>
+              <span className="ml-auto text-xs text-gray-400">{detectedIssues.length} issue{detectedIssues.length > 1 ? 's' : ''}</span>
+            </div>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            {detectedIssues.map((issue, i) => {
+              const meta = ISSUE_SEVERITY_META[issue.severity]
+              return (
+                <div key={i} className={cn('p-3 rounded-lg border', meta.bg,
+                  issue.severity === 'high' ? 'border-red-200 dark:border-red-800' :
+                  issue.severity === 'medium' ? 'border-yellow-200 dark:border-yellow-800' :
+                  'border-blue-200 dark:border-blue-800'
+                )}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={cn('text-xs font-semibold uppercase tracking-wide', meta.color)}>
+                      {meta.label}
+                    </span>
+                    <span className="font-semibold text-sm text-gray-900 dark:text-white">{issue.title}</span>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{issue.description}</p>
+                </div>
+              )
+            })}
+          </CardBody>
+        </Card>
+      )}
+
+      {/* AI Performance Analysis */}
+      {aiAnalysis ? (
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Brain className="w-4 h-4 text-purple-600" />
+              <h2 className="font-semibold text-gray-900 dark:text-white">AI Performance Analysis</h2>
+              <span className="ml-auto text-xs text-gray-400">Powered by Claude</span>
+            </div>
+          </CardHeader>
+          <CardBody className="space-y-5">
+            {/* Tier badge + summary */}
+            {(() => {
+              const tier = TIER_META[aiAnalysis.tier]
+              return (
+                <div className={cn('flex items-start gap-4 p-4 rounded-xl border', tier.bg, tier.border)}>
+                  <div className="text-3xl">{tier.emoji}</div>
+                  <div>
+                    <div className={cn('text-lg font-bold mb-1', tier.color)}>{tier.label} Performance</div>
+                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{aiAnalysis.summary}</p>
+                  </div>
+                </div>
+              )
+            })()}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Sub-system analysis */}
+              <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Component Analysis</h3>
+                {[
+                  { icon: Cpu, label: 'CPU', text: aiAnalysis.cpuAnalysis },
+                  { icon: HardDrive, label: 'Disk', text: aiAnalysis.diskAnalysis },
+                  { icon: Globe, label: 'Network', text: aiAnalysis.networkAnalysis },
+                  { icon: MemoryStick, label: 'Memory', text: aiAnalysis.memoryAnalysis },
+                ].map(({ icon: Icon, label, text }) => text && (
+                  <div key={label} className="flex items-start gap-2">
+                    <Icon className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
+                    <div>
+                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}: </span>
+                      <span className="text-xs text-gray-700 dark:text-gray-300">{text}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Suitable workloads */}
+              {aiAnalysis.suitableWorkloads?.length > 0 && (
+                <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Suitable Workloads</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {aiAnalysis.suitableWorkloads.map((w) => (
+                      <span key={w} className="px-2 py-0.5 text-xs rounded-full bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                        {w}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Bottlenecks */}
+            {aiAnalysis.bottlenecks?.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Bottlenecks</h3>
+                <ul className="space-y-1.5">
+                  {aiAnalysis.bottlenecks.map((b, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
+                      <AlertTriangle className="w-3.5 h-3.5 text-orange-500 mt-0.5 shrink-0" />
+                      {b}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Recommendations */}
+            {aiAnalysis.recommendations?.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Recommendations</h3>
+                <ul className="space-y-1.5">
+                  {aiAnalysis.recommendations.map((r, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
+                      <CheckCircle className="w-3.5 h-3.5 text-green-500 mt-0.5 shrink-0" />
+                      {r}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      ) : (
+        <div className="mt-6 p-4 rounded-xl border border-dashed border-gray-200 dark:border-gray-700 text-center">
+          <Brain className="w-6 h-6 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+          <p className="text-sm text-gray-400 dark:text-gray-500">AI analysis is being generated…</p>
+        </div>
+      )}
+
+      {/* Verify link */}
+      <div className="mt-6 flex justify-center">
+        <Link
+          href={`/verify/${b.uuid}`}
+          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+        >
+          <Shield className="w-3.5 h-3.5" />
+          View Verification Certificate
+          <ExternalLink className="w-3 h-3" />
+        </Link>
+      </div>
     </div>
   )
 }

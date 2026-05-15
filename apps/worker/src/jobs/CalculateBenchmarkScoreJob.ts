@@ -1,8 +1,12 @@
 import { PrismaClient } from '@hitechbenchmark/db'
 import { SCORING_WEIGHTS, SCORE_VERSION } from '@hitechbenchmark/shared'
 import type { BenchmarkPayload } from '@hitechbenchmark/shared'
+import { Queue } from 'bullmq'
+import Redis from 'ioredis'
 
 const prisma = new PrismaClient()
+const _connection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', { maxRetriesPerRequest: null })
+const queue = new Queue('benchmark', { connection: _connection })
 
 const SCORE_MAX = 100
 
@@ -120,6 +124,14 @@ export async function calculateBenchmarkScore({ benchmarkId }: { benchmarkId: st
       data: { avgScore: avgResult._avg.totalScore },
     })
   }
+
+  // Enqueue post-score jobs
+  await Promise.all([
+    queue.add('DetectFakeBenchmark', { benchmarkId }, { priority: 4 }),
+    queue.add('IssueDetection', { benchmarkId }, { priority: 5 }),
+    queue.add('AiAnalysis', { benchmarkId }, { priority: 6, delay: 2000 }),
+    queue.add('RefreshStatisticsCache', {}, { priority: 9 }),
+  ])
 
   console.log(`[CalculateScore] Benchmark ${benchmarkId} scored: ${totalScore.toFixed(1)}`)
 }

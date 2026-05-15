@@ -5,7 +5,8 @@ import { ToolPageShell } from '@/components/tools/ToolPageShell'
 import { ArrowLeftRight, Copy, Trash2, CheckCircle, XCircle } from 'lucide-react'
 
 // ── YAML parser (common subset) ────────────────────────────────────────────
-type YV = null | boolean | number | string | YV[] | Record<string, YV>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type YV = null | boolean | number | string | any[] | Record<string, any>
 
 function parseYAML(src: string): YV {
   const lines = src.split('\n').map(l => l.replace(/\r$/, ''))

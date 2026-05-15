@@ -49,21 +49,24 @@ enum BenchmarkCategory {
 // ============================================================
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String?
-  image     String?
-  role      UserRole @default(user)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  role          UserRole  @default(user)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  accounts       Account[]
-  apiTokens      ApiToken[]
-  benchmarks     Benchmark[]
-  compareHistory CompareHistory[]
-  auditLogs      AdminAuditLog[]
+  accounts         Account[]
+  sessions         Session[]
+  apiTokens        ApiToken[]
+  benchmarks       Benchmark[]
+  compareHistory   CompareHistory[]
+  auditLogs        AdminAuditLog[]
+  monitoredServers MonitoredServer[]
 
   @@index([email])
   @@map("users")
@@ -87,6 +90,27 @@ model Account {
 
   @@unique([provider, providerAccountId])
   @@map("accounts")
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
 }
 
 model ApiToken {
@@ -217,6 +241,9 @@ model Benchmark {
   trustScore       Float               @default(1.0)
   clientVersion    String?
   submitterIp      String?
+  aiAnalysis       Json?
+  aiAnalyzedAt     DateTime?
+  detectedIssues   Json?
   deletedAt        DateTime?
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
@@ -406,4 +433,48 @@ model Nonce {
 
   @@index([expiresAt])
   @@map("nonces")
+}
+
+// ============================================================
+// Historical Monitoring
+// ============================================================
+
+model MonitoredServer {
+  id         String    @id @default(cuid())
+  userId     String
+  nickname   String?
+  hostname   String?
+  interval   String    @default("weekly") // daily, weekly, monthly
+  isActive   Boolean   @default(true)
+  lastRunAt  DateTime?
+  nextRunAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  user    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  results MonitoringResult[]
+
+  @@index([userId])
+  @@index([isActive, nextRunAt])
+  @@map("monitored_servers")
+}
+
+model MonitoringResult {
+  id                String   @id @default(cuid())
+  monitoredServerId String
+  benchmarkId       String?  @unique
+  totalScore        Float?
+  cpuScore          Float?
+  diskScore         Float?
+  networkScore      Float?
+  memoryScore       Float?
+  securityScore     Float?
+  scoreChange       Float?
+  status            String   @default("completed")
+  createdAt         DateTime @default(now())
+
+  monitoredServer MonitoredServer @relation(fields: [monitoredServerId], references: [id], onDelete: Cascade)
+
+  @@index([monitoredServerId, createdAt])
+  @@map("monitoring_results")
 }

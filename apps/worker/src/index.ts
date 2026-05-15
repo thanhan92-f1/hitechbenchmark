@@ -6,6 +6,9 @@ import { enrichGeoIp } from './jobs/EnrichGeoIpJob'
 import { calculateBenchmarkScore } from './jobs/CalculateBenchmarkScoreJob'
 import { detectFakeBenchmark } from './jobs/DetectFakeBenchmarkJob'
 import { refreshStatisticsCache } from './jobs/RefreshStatisticsCacheJob'
+import { analyzeWithAI } from './jobs/AiAnalysisJob'
+import { detectPerformanceIssues } from './jobs/IssueDetectionJob'
+import { processScheduledBenchmarks, recordMonitoringResult } from './jobs/ScheduledBenchmarkJob'
 
 const QUEUE_NAME = 'benchmark'
 const JOB_NAMES = {
@@ -15,6 +18,10 @@ const JOB_NAMES = {
   CALCULATE_SCORE: 'CalculateBenchmarkScore',
   DETECT_FAKE: 'DetectFakeBenchmark',
   REFRESH_STATS_CACHE: 'RefreshStatisticsCache',
+  AI_ANALYSIS: 'AiAnalysis',
+  ISSUE_DETECTION: 'IssueDetection',
+  SCHEDULED_BENCHMARK: 'ScheduledBenchmark',
+  RECORD_MONITORING: 'RecordMonitoringResult',
 }
 
 const connection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
@@ -39,6 +46,14 @@ const worker = new Worker(
         return detectFakeBenchmark(job.data)
       case JOB_NAMES.REFRESH_STATS_CACHE:
         return refreshStatisticsCache(job.data)
+      case JOB_NAMES.AI_ANALYSIS:
+        return analyzeWithAI(job.data)
+      case JOB_NAMES.ISSUE_DETECTION:
+        return detectPerformanceIssues(job.data)
+      case JOB_NAMES.SCHEDULED_BENCHMARK:
+        return processScheduledBenchmarks()
+      case JOB_NAMES.RECORD_MONITORING:
+        return recordMonitoringResult(job.data)
       default:
         console.warn(`[Worker] Unknown job: ${job.name}`)
     }

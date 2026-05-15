@@ -1,4 +1,4 @@
-import NextAuth from 'next-auth'
+import NextAuth, { type NextAuthConfig } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import Google from 'next-auth/providers/google'
 import GitHub from 'next-auth/providers/github'
@@ -13,19 +13,25 @@ const loginSchema = z.object({
   password: z.string().min(6),
 })
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+const config: NextAuthConfig = {
   adapter: PrismaAdapter(db),
   providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      allowDangerousEmailAccountLinking: true,
-    }),
-    GitHub({
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-      allowDangerousEmailAccountLinking: true,
-    }),
+    // OAuth providers are included only when credentials are configured to prevent
+    // NextAuth from throwing a configuration error when env vars are absent.
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? [Google({
+          clientId: process.env.GOOGLE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          allowDangerousEmailAccountLinking: true,
+        })]
+      : []),
+    ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
+      ? [GitHub({
+          clientId: process.env.GITHUB_CLIENT_ID,
+          clientSecret: process.env.GITHUB_CLIENT_SECRET,
+          allowDangerousEmailAccountLinking: true,
+        })]
+      : []),
     Credentials({
       async authorize(credentials) {
         const parsed = loginSchema.safeParse(credentials)
@@ -45,12 +51,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         })
 
         if (!user || !user.isActive) return null
-        if (!user.password) return null // OAuth-only account
+        if (!user.password) return null
 
         let passwordMatch = false
         if (user.password.startsWith('$2')) {
           passwordMatch = await compare(parsed.data.password, user.password)
         } else {
+          // Legacy SHA-256 hash support (e.g. seed-created admin account)
           const sha256 = createHash('sha256').update(parsed.data.password).digest('hex')
           passwordMatch = sha256 === user.password
         }
@@ -69,19 +76,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async signIn({ user, account }) {
-      // For OAuth sign-ins, ensure user is active
       if (account?.provider !== 'credentials') {
         const dbUser = await db.user.findUnique({
           where: { email: user.email! },
           select: { isActive: true },
         })
         if (dbUser && !dbUser.isActive) return false
-
-        // Set default role if new OAuth user
-        if (!dbUser) {
-          // Will be created by adapter — update role after
-          return true
-        }
       }
       return true
     },
@@ -105,7 +105,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   events: {
     async createUser({ user }) {
-      // Ensure new OAuth users get the default 'user' role and are active
       await db.user.update({
         where: { id: user.id },
         data: { role: 'user', isActive: true },
@@ -116,7 +115,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: '/login',
   },
   session: { strategy: 'jwt' },
-})
+}
+
+export const { handlers, auth, signIn, signOut } = NextAuth(config)
 
 // Extend types
 declare module 'next-auth' {
@@ -134,9 +135,3 @@ declare module 'next-auth' {
   }
 }
 
-declare module 'next-auth/jwt' {
-  interface JWT {
-    role?: string
-    id?: string
-  }
-}

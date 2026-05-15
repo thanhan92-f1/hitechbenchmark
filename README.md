@@ -18,6 +18,7 @@ bash <(wget -qO- https://benchmark.codelab.vn/install)
 | Database | PostgreSQL 16 + Prisma ORM |
 | Cache/Queue | Redis 7 + BullMQ |
 | Worker | Node.js + BullMQ worker |
+| AI Analysis | Anthropic Claude / OpenAI / Groq / Together AI / Ollama (multi-provider) |
 | Proxy | Nginx 1.24 |
 | Container | Docker Compose |
 
@@ -136,3 +137,14 @@ docker compose exec web pnpm db:migrate:prod
 | Network | 25% |
 | Memory | 15% |
 | Security | 5% |
+
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [Local Development](docs/local-development.md) | Setup dev environment from scratch |
+| [Production Deployment](docs/production-deployment.md) | Docker Compose production setup |
+| [Developer Guide](docs/developer-guide.md) | Architecture, patterns, adding features |
+| [AI Configuration](docs/ai-configuration.md) | Multi-provider AI setup (Anthropic, OpenAI, Groq, Ollama, ...) |
+| [Environment Variables](docs/environment-variables.md) | All env vars with descriptions |
+| [API Reference](docs/api-reference.md) | Full REST API documentation |

@@ -49,7 +49,7 @@ export async function PUT(request: Request) {
       action: 'system_setting.update',
       entityType: 'SystemSetting',
       entityId: setting.id,
-      newValues: { key: validated.data.key, value: validated.data.value },
+      newValues: { key: validated.data.key, value: validated.data.value as object },
     },
   })
 

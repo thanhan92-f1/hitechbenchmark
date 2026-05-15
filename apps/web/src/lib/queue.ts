@@ -15,6 +15,10 @@ export const JOB_NAMES = {
   DETECT_FAKE: 'DetectFakeBenchmark',
   GENERATE_EXPORT: 'GenerateBenchmarkExport',
   REFRESH_STATS_CACHE: 'RefreshStatisticsCache',
+  AI_ANALYSIS: 'AiAnalysis',
+  ISSUE_DETECTION: 'IssueDetection',
+  SCHEDULED_BENCHMARK: 'ScheduledBenchmark',
+  RECORD_MONITORING: 'RecordMonitoringResult',
 } as const
 
 const connection = redis
