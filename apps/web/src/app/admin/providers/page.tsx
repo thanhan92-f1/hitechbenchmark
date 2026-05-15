@@ -95,13 +95,14 @@ export default async function AdminProvidersPage() {
                     </Badge>
                   </td>
                   <td className="py-3 px-4">
-                    <a
-                      href={`/providers/${p.slug}`}
-                      target="_blank"
-                      className="text-xs text-blue-600 hover:underline"
-                    >
-                      View
-                    </a>
+                    <div className="flex items-center gap-3">
+                      <a href={`/providers/${p.slug}`} target="_blank" className="text-xs text-blue-600 hover:underline">
+                        View
+                      </a>
+                      <a href={`/admin/providers/${p.slug}/plans`} className="text-xs text-purple-600 hover:underline">
+                        Plans
+                      </a>
+                    </div>
                   </td>
                 </tr>
               ))}

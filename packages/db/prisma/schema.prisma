@@ -57,8 +57,18 @@ model User {
   image         String?
   role          UserRole  @default(user)
   isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+
+  // Email verification for manual registration
+  isEmailVerified Boolean   @default(false)
+  emailVerifiedAt DateTime?
+
+  // MFA / 2FA
+  mfaTotpEnabled  Boolean @default(false)
+  mfaTotpSecret   String?
+  mfaEmailEnabled Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   accounts         Account[]
   sessions         Session[]
@@ -67,6 +77,7 @@ model User {
   compareHistory   CompareHistory[]
   auditLogs        AdminAuditLog[]
   monitoredServers MonitoredServer[]
+  passkeys         PasskeyCredential[]
 
   @@index([email])
   @@map("users")
@@ -90,6 +101,25 @@ model Account {
 
   @@unique([provider, providerAccountId])
   @@map("accounts")
+}
+
+model PasskeyCredential {
+  id                  String   @id @default(cuid())
+  userId              String
+  credentialId        String   @unique
+  credentialPublicKey Bytes
+  counter             BigInt   @default(0)
+  deviceType          String?
+  backedUp            Boolean  @default(false)
+  transports          String?
+  name                String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("passkey_credentials")
 }
 
 model Session {
@@ -190,14 +220,41 @@ model Provider {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  country    Country?    @relation(fields: [countryId], references: [id])
-  asn        Asn?        @relation(fields: [asnId], references: [id])
+  country    Country?      @relation(fields: [countryId], references: [id])
+  asn        Asn?          @relation(fields: [asnId], references: [id])
   benchmarks Benchmark[]
   promotions Promotion[]
+  plans      ProviderPlan[]
 
   @@index([slug])
   @@index([isActive, avgScore])
   @@map("providers")
+}
+
+model ProviderPlan {
+  id            String   @id @default(cuid())
+  providerId    String
+  name          String
+  slug          String
+  vcpu          Int?
+  ramGb         Float?
+  diskGb        Float?
+  diskType      String?  // ssd, nvme, hdd
+  bandwidthTb   Float?
+  priceUsd      Float?
+  pricingModel  String?  // monthly, hourly, annual
+  regionCode    String?
+  isActive      Boolean  @default(true)
+  sourceUrl     String?
+  syncedAt      DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, slug])
+  @@index([providerId, isActive])
+  @@map("provider_plans")
 }
 
 // ============================================================
@@ -284,18 +341,21 @@ model BenchmarkResult {
 }
 
 model BenchmarkScore {
-  id            String   @id @default(cuid())
-  benchmarkId   String
-  cpuScore      Float?
-  diskScore     Float?
-  memoryScore   Float?
-  networkScore  Float?
-  securityScore Float?
-  totalScore    Float?
-  rankSnapshot  Int?
-  scoreVersion  String   @default("v1")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id               String  @id @default(cuid())
+  benchmarkId      String
+  cpuScore         Float?
+  diskScore        Float?
+  memoryScore      Float?
+  networkScore     Float?
+  securityScore    Float?
+  totalScore       Float?
+  stabilityBonus   Float?  // -15 to +5 modifier from load avg + uptime
+  confidenceLevel  String? // "low" | "medium" | "high"
+  regionPercentile Int?    // 0-100 percentile within same country
+  rankSnapshot     Int?
+  scoreVersion     String  @default("v1")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   benchmark Benchmark @relation(fields: [benchmarkId], references: [id], onDelete: Cascade)
 

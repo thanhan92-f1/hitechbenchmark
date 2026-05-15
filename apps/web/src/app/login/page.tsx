@@ -4,7 +4,7 @@ import { signIn } from 'next-auth/react'
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardBody } from '@/components/ui/Card'
-import { Server } from 'lucide-react'
+import { Server, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 
 function OAuthButton({
@@ -43,6 +43,7 @@ export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const next = searchParams.get('next') || '/dashboard'
+  const justVerified = searchParams.get('verified') === '1'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,7 +59,11 @@ export default function LoginPage() {
     setLoading(false)
 
     if (result?.error) {
-      setError('Invalid email or password')
+      if (result.error.includes('EMAIL_NOT_VERIFIED')) {
+        router.push(`/verify-email?email=${encodeURIComponent(email)}`)
+      } else {
+        setError('Invalid email or password')
+      }
     } else {
       router.push(next)
       router.refresh()
@@ -75,6 +80,13 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sign in</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">to HiTech Benchmark</p>
         </div>
+
+        {justVerified && (
+          <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-sm text-green-700 dark:text-green-400 mb-4">
+            <CheckCircle className="w-4 h-4 flex-shrink-0" />
+            Email verified! You can now sign in.
+          </div>
+        )}
 
         <Card>
           <CardBody className="space-y-4">

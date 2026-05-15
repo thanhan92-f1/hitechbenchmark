@@ -30,6 +30,22 @@ export async function GET(request: Request) {
   const sortBy = searchParams.get('sort_by') || 'createdAt'
   const sortOrder = (searchParams.get('sort_order') || 'desc') as 'asc' | 'desc'
 
+  // Advanced filters
+  const minRam = searchParams.get('min_ram') ? parseInt(searchParams.get('min_ram')!) : null
+  const maxRam = searchParams.get('max_ram') ? parseInt(searchParams.get('max_ram')!) : null
+  const minCores = searchParams.get('min_cores') ? parseInt(searchParams.get('min_cores')!) : null
+  const maxCores = searchParams.get('max_cores') ? parseInt(searchParams.get('max_cores')!) : null
+  const cpuType = searchParams.get('cpu_type') // 'arm' | 'amd' | 'intel'
+  const minScore = searchParams.get('min_score') ? parseFloat(searchParams.get('min_score')!) : null
+  const maxScore = searchParams.get('max_score') ? parseFloat(searchParams.get('max_score')!) : null
+
+  const cpuTypeFilter = cpuType ? (() => {
+    if (cpuType === 'arm') return { cpuModel: { contains: 'arm', mode: 'insensitive' as const } }
+    if (cpuType === 'amd') return { cpuModel: { contains: 'amd', mode: 'insensitive' as const } }
+    if (cpuType === 'intel') return { cpuModel: { contains: 'intel', mode: 'insensitive' as const } }
+    return {}
+  })() : {}
+
   const where = {
     visibility: 'public' as const,
     status: 'completed' as const,
@@ -37,6 +53,10 @@ export async function GET(request: Request) {
     ...(countryCode && { country: { code: countryCode } }),
     ...(providerSlug && { provider: { slug: providerSlug } }),
     ...(virtualization && { virtualization }),
+    ...(minRam || maxRam ? { ramTotalMb: { ...(minRam ? { gte: minRam } : {}), ...(maxRam ? { lte: maxRam } : {}) } } : {}),
+    ...(minCores || maxCores ? { cpuCores: { ...(minCores ? { gte: minCores } : {}), ...(maxCores ? { lte: maxCores } : {}) } } : {}),
+    ...cpuTypeFilter,
+    ...(minScore || maxScore ? { scores: { some: { totalScore: { ...(minScore ? { gte: minScore } : {}), ...(maxScore ? { lte: maxScore } : {}) } } } } : {}),
     ...(q && {
       OR: [
         { hostname: { contains: q, mode: 'insensitive' as const } },
@@ -47,13 +67,6 @@ export async function GET(request: Request) {
         { organization: { contains: q, mode: 'insensitive' as const } },
       ],
     }),
-  }
-
-  const orderBy: Record<string, string> = {}
-  if (sortBy === 'totalScore') {
-    // handled via scores relation below
-  } else {
-    orderBy[sortBy] = sortOrder
   }
 
   const [benchmarks, total] = await Promise.all([

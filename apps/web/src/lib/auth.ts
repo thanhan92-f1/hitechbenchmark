@@ -47,6 +47,9 @@ const config: NextAuthConfig = {
             password: true,
             role: true,
             isActive: true,
+            isEmailVerified: true,
+            mfaTotpEnabled: true,
+            mfaEmailEnabled: true,
           },
         })
 
@@ -64,12 +67,19 @@ const config: NextAuthConfig = {
 
         if (!passwordMatch) return null
 
+        if (!user.isEmailVerified) {
+          throw new Error('EMAIL_NOT_VERIFIED')
+        }
+
+        const mfaRequired = user.mfaTotpEnabled || user.mfaEmailEnabled
+
         return {
           id: user.id,
           name: user.name,
           email: user.email,
           image: user.image,
           role: user.role,
+          mfaRequired,
         }
       },
     }),
@@ -87,11 +97,14 @@ const config: NextAuthConfig = {
     },
     jwt({ token, user, trigger, session }) {
       if (user) {
-        token.role = (user as { role?: string }).role ?? 'user'
+        const u = user as { role?: string; mfaRequired?: boolean }
+        token.role = u.role ?? 'user'
         token.id = user.id
+        token.mfaRequired = u.mfaRequired ?? false
       }
-      if (trigger === 'update' && session?.role) {
-        token.role = session.role
+      if (trigger === 'update') {
+        if (session?.role) token.role = session.role
+        if (session?.mfaRequired === false) token.mfaRequired = false
       }
       return token
     },
@@ -99,6 +112,7 @@ const config: NextAuthConfig = {
       if (token) {
         session.user.role = (token.role as string) ?? 'user'
         session.user.id = token.id as string
+        session.user.mfaRequired = (token.mfaRequired as boolean) ?? false
       }
       return session
     },
@@ -123,6 +137,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth(config)
 declare module 'next-auth' {
   interface User {
     role?: string
+    mfaRequired?: boolean
   }
   interface Session {
     user: {
@@ -131,6 +146,7 @@ declare module 'next-auth' {
       email?: string | null
       image?: string | null
       role: string
+      mfaRequired?: boolean
     }
   }
 }

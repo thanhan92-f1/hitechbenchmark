@@ -7,6 +7,13 @@ export default auth((req) => {
   const { pathname } = req.nextUrl
   const session = req.auth
 
+  // If logged in but MFA pending, allow only the MFA challenge page
+  if (session?.user?.mfaRequired && pathname !== '/mfa-challenge') {
+    if (!pathname.startsWith('/api/') && !pathname.startsWith('/_next')) {
+      return NextResponse.redirect(new URL('/mfa-challenge', req.url))
+    }
+  }
+
   // Protect /dashboard — redirect to login
   if (pathname.startsWith('/dashboard') && !session?.user) {
     return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(pathname)}`, req.url))
@@ -26,5 +33,5 @@ export default auth((req) => {
 })
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/admin/:path*'],
+  matcher: ['/dashboard/:path*', '/admin/:path*', '/mfa-challenge', '/((?!api|_next|favicon.ico).*)'],
 }

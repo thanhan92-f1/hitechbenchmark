@@ -2,6 +2,8 @@ import { db } from '@/lib/db'
 import { hash } from 'bcryptjs'
 import { z } from 'zod'
 import { apiResponse, apiError } from '@/lib/utils'
+import { generateOtp, storeOtp } from '@/lib/otp'
+import { sendOtpEmail } from '@/lib/email'
 
 const registerSchema = z.object({
   name: z.string().min(2).max(100),
@@ -32,9 +34,14 @@ export async function POST(request: Request) {
   const passwordHash = await hash(password, 12)
 
   const user = await db.user.create({
-    data: { name, email, password: passwordHash },
+    data: { name, email, password: passwordHash, isEmailVerified: false },
     select: { id: true, name: true, email: true, role: true, createdAt: true },
   })
 
-  return Response.json({ success: true, data: user }, { status: 201 })
+  // Generate and send OTP verification email
+  const otp = generateOtp(6)
+  await storeOtp(`email-verify:${email}`, otp, 600) // 10 min TTL
+  await sendOtpEmail(email, otp)
+
+  return Response.json({ success: true, data: { ...user, requiresVerification: true } }, { status: 201 })
 }

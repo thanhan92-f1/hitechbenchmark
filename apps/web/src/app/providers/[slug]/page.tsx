@@ -61,9 +61,20 @@ export default async function ProviderDetailPage({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  const [provider, benchmarks] = await Promise.all([
+
+  async function getPlans(s: string) {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/providers/${s}/plans`, { next: { revalidate: 300 } })
+      if (!res.ok) return []
+      const json = await res.json()
+      return json.data || []
+    } catch { return [] }
+  }
+
+  const [provider, benchmarks, plans] = await Promise.all([
     getProvider(slug),
     getProviderBenchmarks(slug),
+    getPlans(slug),
   ])
 
   if (!provider) notFound()
@@ -168,6 +179,71 @@ export default async function ProviderDetailPage({
                   Based on {provider.benchmarkCount} public benchmark{provider.benchmarkCount !== 1 ? 's' : ''}
                 </p>
               </div>
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {/* Plans & Price/Performance */}
+      {plans.length > 0 && (
+        <Card className="mb-8">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <BarChart2 className="w-4 h-4 text-green-600" />
+              <h2 className="font-semibold text-gray-900 dark:text-white">Plans & Price/Performance</h2>
+            </div>
+          </CardHeader>
+          <CardBody className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                    <th className="px-4 py-2.5 font-medium">Plan</th>
+                    <th className="px-4 py-2.5 font-medium text-right">vCPU</th>
+                    <th className="px-4 py-2.5 font-medium text-right">RAM</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Disk</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Bandwidth</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Price/mo</th>
+                    {provider.avgScore != null && <th className="px-4 py-2.5 font-medium text-right">Score/$ ratio</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {(plans as {
+                    id: string; name: string; vcpu?: number | null; ramGb?: number | null;
+                    diskGb?: number | null; diskType?: string | null; bandwidthTb?: number | null;
+                    priceUsd?: number | null; sourceUrl?: string | null
+                  }[]).map(plan => {
+                    const ratio = plan.priceUsd && provider.avgScore
+                      ? (provider.avgScore / plan.priceUsd).toFixed(2)
+                      : null
+                    return (
+                      <tr key={plan.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
+                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                          {plan.sourceUrl ? (
+                            <a href={plan.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                              {plan.name}
+                            </a>
+                          ) : plan.name}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-400">{plan.vcpu ?? '—'}</td>
+                        <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-400">{plan.ramGb ? `${plan.ramGb} GB` : '—'}</td>
+                        <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-400">
+                          {plan.diskGb ? `${plan.diskGb} GB${plan.diskType ? ` ${plan.diskType.toUpperCase()}` : ''}` : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-400">{plan.bandwidthTb ? `${plan.bandwidthTb} TB` : '—'}</td>
+                        <td className="px-4 py-3 text-right font-mono text-green-600 dark:text-green-400">
+                          {plan.priceUsd ? `$${plan.priceUsd.toFixed(2)}` : '—'}
+                        </td>
+                        {provider.avgScore != null && (
+                          <td className="px-4 py-3 text-right font-mono text-purple-600 dark:text-purple-400">
+                            {ratio ?? '—'}
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           </CardBody>
         </Card>

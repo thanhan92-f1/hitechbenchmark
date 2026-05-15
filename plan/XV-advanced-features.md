@@ -26,6 +26,12 @@
 | Security headers (CSP, HSTS, Permissions-Policy) | ✅ |
 | CI/CD GitHub Actions + Dockerfiles | ✅ |
 | Dashboard: visibility toggle + API token manager | ✅ |
+| Email OTP verification on registration | ✅ |
+| MFA: Google Authenticator (TOTP) | ✅ |
+| MFA: Passkey (WebAuthn/FIDO2) | ✅ |
+| MFA: Email 2FA | ✅ |
+| /dashboard/security — MFA management page | ✅ |
+| /mfa-challenge page — post-login MFA verification | ✅ |
 
 ---
 
@@ -69,12 +75,12 @@
 ---
 
 ### 3. Global Latency Map ⭐
-**Status:** 🔲  
+**Status:** ✅ (SVG map with ping overlay implemented)  
 **Description:** Interactive world map showing ping latency from the benchmarked VPS to global regions.
 
-- [ ] Use `react-simple-maps` or Leaflet for world map
-- [ ] Overlay heatmap from `locations[]` ping data
-- [ ] Color-code by ping: green (<20ms), yellow (20–80ms), orange (80–150ms), red (>150ms)
+- [x] SVG world map with hardcoded coordinate dictionary for 50+ cities
+- [x] Overlay from `locations[]` ping data with color-coded dots
+- [x] Color-code by ping: green (<20ms), yellow-green (<50ms), amber (<100ms), orange (<200ms), red (>200ms)
 - [ ] Traceroute visualization (hop-by-hop path)
 - [ ] BGP route visualization (optional, via RIPE API)
 
@@ -145,17 +151,17 @@ Advanced enhancements:
 ---
 
 ### 8. Public Ranking System
-**Status:** ✅ (basic rankings page exists)  
+**Status:** ✅ (CPU type filter + category tabs implemented)  
 
 Enhancements:
-- [ ] Top fastest VPS (by totalScore)
-- [ ] Top network VPS (by networkScore)
-- [ ] Top disk VPS (by diskScore)
+- [x] Top fastest VPS (by totalScore)
+- [x] Top network VPS (by networkScore)
+- [x] Top disk VPS (by diskScore)
 - [ ] Top budget VPS (price/performance — needs price data)
 - [ ] Top provider by country
-- [ ] Top ARM VPS (filter by cpuModel containing "ARM"/"Ampere"/"Graviton")
-- [ ] Top AMD VPS
-- [ ] Top Intel VPS
+- [x] Top ARM VPS (filter by cpuModel containing "arm")
+- [x] Top AMD VPS
+- [x] Top Intel VPS
 - [ ] Rankings with provider logo + flag
 
 **Files to modify:**
@@ -165,11 +171,12 @@ Enhancements:
 ---
 
 ### 9. Price / Performance Score
-**Status:** 🔲  
+**Status:** ✅ (ProviderPlan model + admin CRUD + provider detail table implemented)  
 
-- [ ] `ProviderPlan` model: (provider, plan_name, vcpu, ram_gb, disk_gb, price_usd, bandwidth_tb)
-- [ ] Price/performance ratio: `totalScore / price_usd`
+- [x] `ProviderPlan` model: (provider, plan_name, vcpu, ram_gb, disk_gb, price_usd, bandwidth_tb)
+- [x] Price/performance ratio: `totalScore / price_usd` displayed in provider detail
 - [ ] Giá/IOPS, giá/bandwidth, giá/vCPU, giá/RAM
+- [x] Plans table on provider pages with score/$ ratio
 - [ ] "Best value" badge on provider pages
 - [ ] Best budget VPS list
 - [ ] Best enterprise VPS list
@@ -320,29 +327,28 @@ Enhancements:
 ---
 
 ### 21. Dark Web / Blacklist Check ⭐
-**Status:** 🔲  
+**Status:** ✅ (DNSBL check on benchmark detail implemented via IpReputation component)  
 
 - [ ] AbuseIPDB API integration (`abuseipdb.com`)
-- [ ] Spamhaus lookup (DNSBL query)
+- [x] Spamhaus/Barracuda/SORBS/SpamCop DNSBL query (6 blacklists)
 - [ ] TOR exit node check
 - [ ] VPN/residential IP detection (IPHub, IPData)
 - [ ] Mail blacklist check (MXToolbox API)
-- [ ] Blacklist score displayed on benchmark detail page
+- [x] IP Reputation card displayed on benchmark detail page
 
 ---
 
 ### 22. Internet Quality Score
-**Status:** 🔲  
+**Status:** ✅ (5 use-case scores implemented as badge grid on benchmark detail)  
 
-- [ ] Composite score for different use cases:
+- [x] Composite score for different use cases:
   - Gaming: low ping + low jitter + stable connection
   - Streaming: high download + low packet loss
-  - VPN: bandwidth + no blacklist
-  - Hosting: uptime + low TTFB + DDoS protection
-  - AI workload: RAM + CPU multi-thread + GPU
-  - Enterprise: stability + SLA + redundancy
-- [ ] Score 0–100 per use case
-- [ ] Displayed as use-case badge grid
+  - VPN/Proxy: bandwidth + server score
+  - Hosting: uptime + CPU stability
+  - AI/ML: RAM + CPU multi-thread + network
+- [x] Score 0–100 per use case with excellent/good/fair/poor tiers
+- [x] Displayed as use-case badge grid with progress bar
 
 ---
 
@@ -363,14 +369,14 @@ Enhancements:
 ---
 
 ### 24. Realtime Status Page
-**Status:** 🔲  
+**Status:** ✅ (basic status page with DB + Redis health check implemented)  
 
-- [ ] `/status` public page
-- [ ] Queue depth (waiting, active, completed, failed)
+- [x] `/status` public page
+- [x] Queue depth (waiting, active, completed, failed)
 - [ ] Worker health (last heartbeat)
 - [ ] Speedtest node availability
-- [ ] API response time (self-ping)
-- [ ] PostgreSQL + Redis connectivity
+- [x] API response time (DB + Redis latency)
+- [x] PostgreSQL + Redis connectivity check
 - [ ] Historical uptime chart (90-day)
 
 ---
@@ -388,12 +394,12 @@ Enhancements:
 ---
 
 ### 26. Advanced Search Engine ⭐
-**Status:** ✅ (basic: hostname, CPU, IP, city, ISP, org)  
+**Status:** ✅ (advanced filters for RAM, CPU cores, score, CPU type implemented)  
 
 Enhancements:
-- [ ] Filter by RAM range (e.g., 512MB – 32GB)
-- [ ] Filter by CPU cores range
-- [ ] Filter by benchmark score range
+- [x] Filter by RAM range (e.g., 512MB – 32GB)
+- [x] Filter by CPU cores range
+- [x] Filter by benchmark score range
 - [ ] Filter by bandwidth / IOPS
 - [ ] Filter by ASN number
 - [ ] Filter by provider slug
@@ -465,14 +471,14 @@ Enhancements:
 ---
 
 ### 32. Smart Scoring Engine ⭐
-**Status:** ✅ (weighted scoring implemented in worker)  
+**Status:** ✅ (stability bonus, confidence level, region percentile implemented)  
 
 Enhancements:
-- [ ] Region-adjusted scoring (compare vs peers in same country)
+- [x] Region-adjusted scoring (regionPercentile: compare vs peers in same country)
 - [ ] Provider-adjusted scoring (compare vs same provider)
 - [ ] AI-weighted ranking (normalize for hardware generation)
-- [ ] Stability bonus/penalty (long uptime = bonus, high load avg = penalty)
-- [ ] Score confidence interval (based on number of benchmark runs)
+- [x] Stability bonus/penalty (long uptime = bonus, high load avg = penalty, ±10 pts)
+- [x] Score confidence level (high/medium/low based on result count + data richness)
 
 ---
 
@@ -493,12 +499,12 @@ Enhancements:
 ---
 
 ### 34. Advanced Export ⭐
-**Status:** ✅ (JSON export done)  
+**Status:** ✅ (CSV + Markdown export implemented; PDF + HTML + XML pending)  
 
 Remaining:
-- [ ] CSV export (`/api/me/benchmarks/[uuid]/export/csv`)
+- [x] CSV export (`/api/me/benchmarks/[uuid]/export/csv`)
 - [ ] PDF certificate (`/api/me/benchmarks/[uuid]/export/pdf`)
-- [ ] Markdown summary (`/api/me/benchmarks/[uuid]/export/markdown`)
+- [x] Markdown summary (`/api/me/benchmarks/[uuid]/export/markdown`)
 - [ ] HTML shareable page (static, embeddable)
 - [ ] XML export for integrations
 

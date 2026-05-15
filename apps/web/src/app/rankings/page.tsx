@@ -10,6 +10,21 @@ export const metadata: Metadata = {
   description: 'Top ranked VPS and cloud servers by benchmark performance score.',
 }
 
+const CPU_TABS = [
+  { id: '', label: 'All CPUs' },
+  { id: 'intel', label: 'Intel' },
+  { id: 'amd', label: 'AMD' },
+  { id: 'arm', label: 'ARM' },
+]
+
+const SCORE_TABS = [
+  { id: 'total', label: 'Overall' },
+  { id: 'cpu', label: 'CPU' },
+  { id: 'disk', label: 'Disk' },
+  { id: 'memory', label: 'Memory' },
+  { id: 'network', label: 'Network' },
+]
+
 async function getRankings(params: Record<string, string>) {
   try {
     const sp = new URLSearchParams(params)
@@ -31,7 +46,14 @@ export default async function RankingsPage({
   searchParams: Promise<Record<string, string>>
 }) {
   const params = await searchParams
+  const cpuType = params.cpu_type || ''
+  const category = params.category || 'total'
   const rankings = await getRankings(params)
+
+  function tabHref(overrides: Record<string, string>) {
+    const p = new URLSearchParams({ ...params, ...overrides })
+    return `/rankings?${p.toString()}`
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -48,7 +70,7 @@ export default async function RankingsPage({
       </div>
 
       {/* Score weight explanation */}
-      <Card className="mb-6">
+      <Card className="mb-4">
         <CardBody className="py-3">
           <div className="flex flex-wrap gap-4 text-xs text-gray-500 dark:text-gray-400">
             <span className="font-medium text-gray-700 dark:text-gray-300">Score weights:</span>
@@ -58,6 +80,42 @@ export default async function RankingsPage({
           </div>
         </CardBody>
       </Card>
+
+      {/* CPU type filter tabs */}
+      <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl mb-4 w-fit">
+        {CPU_TABS.map(tab => (
+          <Link
+            key={tab.id}
+            href={tabHref({ cpu_type: tab.id, category })}
+            className={cn(
+              'px-4 py-2 text-sm font-medium rounded-lg transition-colors',
+              cpuType === tab.id
+                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+            )}
+          >
+            {tab.label}
+          </Link>
+        ))}
+      </div>
+
+      {/* Score category tabs */}
+      <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-gray-700">
+        {SCORE_TABS.map(tab => (
+          <Link
+            key={tab.id}
+            href={tabHref({ category: tab.id, cpu_type: cpuType })}
+            className={cn(
+              'px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px',
+              category === tab.id
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+            )}
+          >
+            {tab.label}
+          </Link>
+        ))}
+      </div>
 
       {rankings.length > 0 ? (
         <div className="space-y-2">
@@ -70,65 +128,69 @@ export default async function RankingsPage({
               country?: { name: string; flagEmoji?: string };
               provider?: { name: string; slug: string; logoUrl?: string };
             }
-          }) => (
-            <Link key={entry.rank} href={`/benchmarks/${entry.benchmark.uuid}`}>
-              <Card hover>
-                <CardBody className="py-3">
-                  <div className="flex items-center gap-4">
-                    {/* Rank badge */}
-                    <div className={cn(
-                      'flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm',
-                      entry.rank === 1 ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' :
-                      entry.rank === 2 ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' :
-                      entry.rank === 3 ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' :
-                      'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400',
-                    )}>
-                      #{entry.rank}
-                    </div>
+          }) => {
+            const displayScore = category === 'cpu' ? entry.cpuScore :
+              category === 'disk' ? entry.diskScore :
+              category === 'memory' ? entry.memoryScore :
+              category === 'network' ? entry.networkScore :
+              entry.totalScore
 
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <span className="font-semibold text-gray-900 dark:text-white text-sm">
-                          {entry.benchmark.hostname || entry.benchmark.uuid?.slice(0, 12)}
-                        </span>
-                        {entry.benchmark.virtualization && (
-                          <Badge variant="outline">{entry.benchmark.virtualization.toUpperCase()}</Badge>
-                        )}
-                        {entry.benchmark.provider && (
-                          <span className="text-xs text-blue-600 dark:text-blue-400">
-                            @ {entry.benchmark.provider.name}
+            return (
+              <Link key={entry.rank} href={`/benchmarks/${entry.benchmark.uuid}`}>
+                <Card hover>
+                  <CardBody className="py-3">
+                    <div className="flex items-center gap-4">
+                      <div className={cn(
+                        'flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm',
+                        entry.rank === 1 ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' :
+                        entry.rank === 2 ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' :
+                        entry.rank === 3 ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' :
+                        'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400',
+                      )}>
+                        #{entry.rank}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                          <span className="font-semibold text-gray-900 dark:text-white text-sm">
+                            {entry.benchmark.hostname || entry.benchmark.uuid?.slice(0, 12)}
                           </span>
-                        )}
+                          {entry.benchmark.virtualization && (
+                            <Badge variant="outline">{entry.benchmark.virtualization.toUpperCase()}</Badge>
+                          )}
+                          {entry.benchmark.provider && (
+                            <span className="text-xs text-blue-600 dark:text-blue-400">
+                              @ {entry.benchmark.provider.name}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-3 text-xs text-gray-500 dark:text-gray-400">
+                          {entry.benchmark.cpuModel && (
+                            <span>{entry.benchmark.cpuModel}{entry.benchmark.cpuCores ? ` (${entry.benchmark.cpuCores}c)` : ''}</span>
+                          )}
+                          {entry.benchmark.ramTotalMb && <span>{formatRAM(entry.benchmark.ramTotalMb)}</span>}
+                          {entry.benchmark.country && (
+                            <span>{entry.benchmark.country.flagEmoji} {entry.benchmark.city ? `${entry.benchmark.city}, ` : ''}{entry.benchmark.country.name}</span>
+                          )}
+                          <span>{timeAgo(entry.benchmark.createdAt)}</span>
+                        </div>
                       </div>
-                      <div className="flex flex-wrap gap-3 text-xs text-gray-500 dark:text-gray-400">
-                        {entry.benchmark.cpuModel && (
-                          <span>{entry.benchmark.cpuModel}{entry.benchmark.cpuCores ? ` (${entry.benchmark.cpuCores}c)` : ''}</span>
-                        )}
-                        {entry.benchmark.ramTotalMb && <span>{formatRAM(entry.benchmark.ramTotalMb)}</span>}
-                        {entry.benchmark.country && (
-                          <span>{entry.benchmark.country.flagEmoji} {entry.benchmark.city ? `${entry.benchmark.city}, ` : ''}{entry.benchmark.country.name}</span>
-                        )}
-                        <span>{timeAgo(entry.benchmark.createdAt)}</span>
+
+                      <div className="hidden md:flex items-center gap-4 text-xs text-gray-400">
+                        {entry.cpuScore != null && category !== 'cpu' && <span>CPU: <span className="text-blue-500">{entry.cpuScore.toFixed(1)}</span></span>}
+                        {entry.diskScore != null && category !== 'disk' && <span>Disk: <span className="text-yellow-500">{entry.diskScore.toFixed(1)}</span></span>}
+                        {entry.networkScore != null && category !== 'network' && <span>Net: <span className="text-green-500">{entry.networkScore.toFixed(1)}</span></span>}
+                      </div>
+
+                      <div className={cn('flex-shrink-0 text-2xl font-bold font-mono', getScoreColor(displayScore ?? 0))}>
+                        {displayScore != null ? formatScore(displayScore) : '—'}
                       </div>
                     </div>
-
-                    {/* Scores */}
-                    <div className="hidden md:flex items-center gap-4 text-xs text-gray-400">
-                      {entry.cpuScore != null && <span>CPU: <span className="text-blue-500">{entry.cpuScore.toFixed(1)}</span></span>}
-                      {entry.diskScore != null && <span>Disk: <span className="text-yellow-500">{entry.diskScore.toFixed(1)}</span></span>}
-                      {entry.networkScore != null && <span>Net: <span className="text-green-500">{entry.networkScore.toFixed(1)}</span></span>}
-                    </div>
-
-                    {/* Total Score */}
-                    <div className={cn('flex-shrink-0 text-2xl font-bold font-mono', getScoreColor(entry.totalScore))}>
-                      {formatScore(entry.totalScore)}
-                    </div>
-                  </div>
-                </CardBody>
-              </Card>
-            </Link>
-          ))}
+                  </CardBody>
+                </Card>
+              </Link>
+            )
+          })}
         </div>
       ) : (
         <Card>

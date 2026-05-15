@@ -12,7 +12,10 @@ export async function GET(request: Request) {
   const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
   const perPage = Math.min(50, parseInt(searchParams.get('per_page') || '20'))
 
-  const cacheKey = `${CACHE_KEY}:${page}:${perPage}`
+  const cpuType = searchParams.get('cpu_type')
+  const scoreCategory = searchParams.get('category') || 'total'
+
+  const cacheKey = `${CACHE_KEY}:${page}:${perPage}:${cpuType || 'all'}:${scoreCategory}`
   const cached = await redis.get(cacheKey)
   if (cached) {
     return apiResponse(JSON.parse(cached))
@@ -20,19 +23,35 @@ export async function GET(request: Request) {
 
   const skip = (page - 1) * perPage
 
-  // Get benchmarks ordered by total score
+  const cpuFilter = cpuType ? (() => {
+    if (cpuType === 'arm') return { cpuModel: { contains: 'arm', mode: 'insensitive' as const } }
+    if (cpuType === 'amd') return { cpuModel: { contains: 'amd', mode: 'insensitive' as const } }
+    if (cpuType === 'intel') return { cpuModel: { contains: 'intel', mode: 'insensitive' as const } }
+    return {}
+  })() : {}
+
+  const sortField = scoreCategory === 'cpu' ? 'cpuScore' :
+    scoreCategory === 'disk' ? 'diskScore' :
+    scoreCategory === 'memory' ? 'memoryScore' :
+    scoreCategory === 'network' ? 'networkScore' :
+    'totalScore'
+
+  const benchmarkWhere = {
+    visibility: 'public' as const,
+    status: 'completed' as const,
+    deletedAt: null,
+    trustScore: { gte: 0.5 },
+    ...cpuFilter,
+  }
+
+  // Get benchmarks ordered by score
   const [scores, total] = await Promise.all([
     db.benchmarkScore.findMany({
       where: {
-        totalScore: { not: null },
-        benchmark: {
-          visibility: 'public',
-          status: 'completed',
-          deletedAt: null,
-          trustScore: { gte: 0.5 },
-        },
+        [sortField]: { not: null },
+        benchmark: benchmarkWhere,
       },
-      orderBy: { totalScore: 'desc' },
+      orderBy: { [sortField]: 'desc' },
       skip,
       take: perPage,
       distinct: ['benchmarkId'],
@@ -55,13 +74,8 @@ export async function GET(request: Request) {
     }),
     db.benchmarkScore.count({
       where: {
-        totalScore: { not: null },
-        benchmark: {
-          visibility: 'public',
-          status: 'completed',
-          deletedAt: null,
-          trustScore: { gte: 0.5 },
-        },
+        [sortField]: { not: null },
+        benchmark: benchmarkWhere,
       },
     }),
   ])

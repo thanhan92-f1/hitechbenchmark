@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { cn } from '@/lib/utils'
-import { Server, BarChart2, GitCompare, Tag, Search, Menu, X, ChevronDown, Wrench, Info } from 'lucide-react'
+import { Server, BarChart2, GitCompare, Tag, Search, Menu, X, ChevronDown, Wrench, Info, Activity } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { toolGroups } from '@/lib/tools-data'
 

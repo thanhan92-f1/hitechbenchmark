@@ -8,11 +8,14 @@ import {
 import type { Metadata } from 'next'
 import { Cpu, HardDrive, MemoryStick, Globe, Shield, Server, Brain, AlertTriangle, CheckCircle, ExternalLink } from 'lucide-react'
 import { ShareCopy } from '@/components/benchmark/ShareCopy'
-import { ExportJsonButton } from '@/components/benchmark/ExportButton'
+import { ExportDropdown } from '@/components/benchmark/ExportButton'
 import { NetworkSpeedChart } from '@/components/charts/NetworkSpeedChart'
 import { ScoreRadarChart } from '@/components/charts/ScoreRadarChart'
 import { NetworkAnalysis } from '@/components/benchmark/NetworkAnalysis'
 import { SecurityAudit } from '@/components/benchmark/SecurityAudit'
+import { UseCaseBadges } from '@/components/benchmark/UseCaseBadges'
+import { LatencyMap } from '@/components/benchmark/LatencyMap'
+import { IpReputation } from '@/components/benchmark/IpReputation'
 import type { AiAnalysis, PerformanceIssue } from '@/lib/ai-analysis'
 import { TIER_META, ISSUE_SEVERITY_META } from '@/lib/ai-analysis'
 import Link from 'next/link'
@@ -126,9 +129,25 @@ export default async function BenchmarkDetailPage({
             <div className="text-4xl font-bold text-gray-300 dark:text-gray-700">—</div>
           )}
           <div className="text-sm text-gray-400 mt-1">Total Score</div>
+          <div className="flex flex-wrap gap-1.5 mt-2 justify-center">
+            {scores?.confidenceLevel && (
+              <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full border', {
+                'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800': scores.confidenceLevel === 'high',
+                'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800': scores.confidenceLevel === 'medium',
+                'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700': scores.confidenceLevel === 'low',
+              })}>
+                {scores.confidenceLevel === 'high' ? '● High' : scores.confidenceLevel === 'medium' ? '◑ Medium' : '○ Low'} confidence
+              </span>
+            )}
+            {scores?.regionPercentile != null && (
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full border bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800">
+                Top {100 - scores.regionPercentile}% in region
+              </span>
+            )}
+          </div>
           <div className="flex flex-wrap gap-2 mt-3">
             <ShareCopy url={`${siteUrl}/benchmarks/${uuid}`} />
-            <ExportJsonButton uuid={uuid} />
+            <ExportDropdown uuid={uuid} />
           </div>
         </div>
       </div>
@@ -232,6 +251,22 @@ export default async function BenchmarkDetailPage({
           </CardBody>
         </Card>
       </div>
+
+      {/* IP Reputation */}
+      {b.ipv4 && (
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-orange-600" />
+              <h2 className="font-semibold text-gray-900 dark:text-white">IP Reputation</h2>
+              <span className="ml-auto text-xs text-gray-400">{b.ipv4}</span>
+            </div>
+          </CardHeader>
+          <CardBody>
+            <IpReputation ip={b.ipv4} />
+          </CardBody>
+        </Card>
+      )}
 
       {/* Disk Benchmarks */}
       {resultsByCategory.disk?.length > 0 && (
@@ -347,6 +382,36 @@ export default async function BenchmarkDetailPage({
                 </tbody>
               </table>
             </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {/* Global Latency Map */}
+      {b.locations?.length > 0 && (
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Globe className="w-4 h-4 text-green-600" />
+              <h2 className="font-semibold text-gray-900 dark:text-white">Global Latency Map</h2>
+            </div>
+          </CardHeader>
+          <CardBody>
+            <LatencyMap locations={b.locations} />
+          </CardBody>
+        </Card>
+      )}
+
+      {/* Internet Quality Score — Use-case badges */}
+      {b.locations?.length > 0 && (
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Globe className="w-4 h-4 text-indigo-600" />
+              <h2 className="font-semibold text-gray-900 dark:text-white">Internet Quality Score</h2>
+            </div>
+          </CardHeader>
+          <CardBody>
+            <UseCaseBadges locations={b.locations} />
           </CardBody>
         </Card>
       )}

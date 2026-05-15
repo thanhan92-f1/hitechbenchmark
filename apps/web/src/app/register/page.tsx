@@ -1,12 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { signIn } from 'next-auth/react'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Server } from 'lucide-react'
 import Link from 'next/link'
-import type { Metadata } from 'next'
 
 function OAuthButton({ provider, label }: { provider: string; label: string }) {
   const [loading, setLoading] = useState(false)
@@ -69,17 +68,7 @@ export default function RegisterPage() {
         setError(json.message || 'Registration failed')
         return
       }
-      // Auto sign in after register
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
-      })
-      if (result?.ok) {
-        router.push('/dashboard')
-      } else {
-        router.push('/login')
-      }
+      router.push(`/verify-email?email=${encodeURIComponent(email)}`)
     } catch {
       setError('Network error. Please try again.')
     } finally {

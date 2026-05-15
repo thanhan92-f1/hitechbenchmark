@@ -1,10 +1,9 @@
 'use client'
 
 import { useState, useCallback, useTransition } from 'react'
-import { Search, SlidersHorizontal, Server } from 'lucide-react'
+import { Search, SlidersHorizontal, Server, ChevronDown, ChevronUp } from 'lucide-react'
 import { BenchmarkCard } from '@/components/benchmark/BenchmarkCard'
 import { Card, CardBody } from '@/components/ui/Card'
-import { cn } from '@/lib/utils'
 import { useSearchParams, useRouter } from 'next/navigation'
 
 const VIRTUALIZATIONS = [
@@ -14,6 +13,24 @@ const VIRTUALIZATIONS = [
   { value: 'openvz', label: 'OpenVZ' },
   { value: 'lxc', label: 'LXC' },
   { value: 'none', label: 'Dedicated' },
+]
+
+const CPU_TYPES = [
+  { value: '', label: 'All CPUs' },
+  { value: 'intel', label: 'Intel' },
+  { value: 'amd', label: 'AMD' },
+  { value: 'arm', label: 'ARM' },
+]
+
+const RAM_OPTIONS = [
+  { value: '', label: 'Any RAM' },
+  { value: '512', label: '512 MB+' },
+  { value: '1024', label: '1 GB+' },
+  { value: '2048', label: '2 GB+' },
+  { value: '4096', label: '4 GB+' },
+  { value: '8192', label: '8 GB+' },
+  { value: '16384', label: '16 GB+' },
+  { value: '32768', label: '32 GB+' },
 ]
 
 const SORT_OPTIONS = [
@@ -44,23 +61,36 @@ export default function SearchPage() {
 
   const [q, setQ] = useState(sp.get('q') || '')
   const [virtualization, setVirtualization] = useState(sp.get('virtualization') || '')
+  const [cpuType, setCpuType] = useState(sp.get('cpu_type') || '')
+  const [minRam, setMinRam] = useState(sp.get('min_ram') || '')
+  const [minCores, setMinCores] = useState(sp.get('min_cores') || '')
+  const [maxCores, setMaxCores] = useState(sp.get('max_cores') || '')
+  const [minScore, setMinScore] = useState(sp.get('min_score') || '')
+  const [maxScore, setMaxScore] = useState(sp.get('max_score') || '')
   const [sortBy, setSortBy] = useState(sp.get('sort_by') || 'createdAt')
+  const [showAdvanced, setShowAdvanced] = useState(false)
+
   const [results, setResults] = useState<Benchmark[]>([])
   const [meta, setMeta] = useState<{ total: number; totalPages: number; page: number; hasNext: boolean } | null>(null)
   const [searched, setSearched] = useState(false)
   const [isPending, startTransition] = useTransition()
 
-  const doSearch = useCallback(async (
-    query: string,
-    virt: string,
-    sort: string,
-    page = 1,
-  ) => {
+  const doSearch = useCallback(async (opts: {
+    query?: string; virt?: string; cpuType?: string; minRam?: string
+    minCores?: string; maxCores?: string; minScore?: string; maxScore?: string
+    sort?: string; page?: number
+  }) => {
     const params = new URLSearchParams()
-    if (query) params.set('q', query)
-    if (virt) params.set('virtualization', virt)
-    params.set('sort_by', sort)
-    params.set('page', String(page))
+    if (opts.query) params.set('q', opts.query)
+    if (opts.virt) params.set('virtualization', opts.virt)
+    if (opts.cpuType) params.set('cpu_type', opts.cpuType)
+    if (opts.minRam) params.set('min_ram', opts.minRam)
+    if (opts.minCores) params.set('min_cores', opts.minCores)
+    if (opts.maxCores) params.set('max_cores', opts.maxCores)
+    if (opts.minScore) params.set('min_score', opts.minScore)
+    if (opts.maxScore) params.set('max_score', opts.maxScore)
+    params.set('sort_by', opts.sort || 'createdAt')
+    params.set('page', String(opts.page || 1))
     params.set('per_page', '18')
 
     router.replace(`/search?${params.toString()}`, { scroll: false })
@@ -79,9 +109,27 @@ export default function SearchPage() {
     })
   }, [router])
 
+  const getOpts = (overrides: Record<string, string> = {}) => ({
+    query: q, virt: virtualization, cpuType, minRam, minCores, maxCores, minScore, maxScore, sort: sortBy,
+    ...overrides,
+  })
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    doSearch(q, virtualization, sortBy)
+    doSearch(getOpts())
+  }
+
+  const handleFilterChange = (key: string, value: string) => {
+    const updates: Record<string, string> = { [key]: value }
+    if (key === 'virt') setVirtualization(value)
+    else if (key === 'cpuType') setCpuType(value)
+    else if (key === 'minRam') setMinRam(value)
+    else if (key === 'minCores') setMinCores(value)
+    else if (key === 'maxCores') setMaxCores(value)
+    else if (key === 'minScore') setMinScore(value)
+    else if (key === 'maxScore') setMaxScore(value)
+    else if (key === 'sort') setSortBy(value)
+    doSearch(getOpts(updates))
   }
 
   return (
@@ -93,8 +141,7 @@ export default function SearchPage() {
         </p>
       </div>
 
-      {/* Search form */}
-      <form onSubmit={handleSubmit} className="mb-6">
+      <form onSubmit={handleSubmit} className="mb-6 space-y-3">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -116,15 +163,14 @@ export default function SearchPage() {
           </button>
         </div>
 
-        {/* Filters row */}
-        <div className="flex flex-wrap gap-3 mt-3">
+        {/* Quick filters */}
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
             <SlidersHorizontal className="w-4 h-4" />
-            <span>Filters:</span>
           </div>
           <select
             value={virtualization}
-            onChange={(e) => { setVirtualization(e.target.value); doSearch(q, e.target.value, sortBy) }}
+            onChange={(e) => handleFilterChange('virt', e.target.value)}
             className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300"
           >
             {VIRTUALIZATIONS.map((v) => (
@@ -132,15 +178,93 @@ export default function SearchPage() {
             ))}
           </select>
           <select
+            value={cpuType}
+            onChange={(e) => handleFilterChange('cpuType', e.target.value)}
+            className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300"
+          >
+            {CPU_TYPES.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+          <select
             value={sortBy}
-            onChange={(e) => { setSortBy(e.target.value); doSearch(q, virtualization, e.target.value) }}
+            onChange={(e) => handleFilterChange('sort', e.target.value)}
             className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300"
           >
             {SORT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(a => !a)}
+            className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+          >
+            Advanced {showAdvanced ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
         </div>
+
+        {/* Advanced filters */}
+        {showAdvanced && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Min RAM</label>
+              <select
+                value={minRam}
+                onChange={(e) => handleFilterChange('minRam', e.target.value)}
+                className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300"
+              >
+                {RAM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Min vCPU</label>
+              <input
+                type="number"
+                min="1"
+                value={minCores}
+                onChange={(e) => handleFilterChange('minCores', e.target.value)}
+                placeholder="e.g. 2"
+                className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Max vCPU</label>
+              <input
+                type="number"
+                min="1"
+                value={maxCores}
+                onChange={(e) => handleFilterChange('maxCores', e.target.value)}
+                placeholder="e.g. 32"
+                className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Min Score</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={minScore}
+                onChange={(e) => handleFilterChange('minScore', e.target.value)}
+                placeholder="e.g. 50"
+                className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Max Score</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={maxScore}
+                onChange={(e) => handleFilterChange('maxScore', e.target.value)}
+                placeholder="e.g. 90"
+                className="w-full px-2 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300"
+              />
+            </div>
+          </div>
+        )}
       </form>
 
       {/* Results */}
@@ -178,7 +302,7 @@ export default function SearchPage() {
             <div className="flex justify-center gap-2 mt-8">
               {meta.page > 1 && (
                 <button
-                  onClick={() => doSearch(q, virtualization, sortBy, meta.page - 1)}
+                  onClick={() => doSearch(getOpts({ page: String(meta.page - 1) }))}
                   className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                 >
                   Previous
@@ -189,7 +313,7 @@ export default function SearchPage() {
               </span>
               {meta.hasNext && (
                 <button
-                  onClick={() => doSearch(q, virtualization, sortBy, meta.page + 1)}
+                  onClick={() => doSearch(getOpts({ page: String(meta.page + 1) }))}
                   className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
                 >
                   Next
@@ -203,7 +327,7 @@ export default function SearchPage() {
       {!isPending && !searched && (
         <div className="text-center py-20">
           <Search className="w-16 h-16 text-gray-200 dark:text-gray-800 mx-auto mb-4" />
-          <p className="text-gray-400 dark:text-gray-600">Enter a keyword to start searching</p>
+          <p className="text-gray-400 dark:text-gray-600">Enter a keyword or select filters to start searching</p>
         </div>
       )}
     </div>

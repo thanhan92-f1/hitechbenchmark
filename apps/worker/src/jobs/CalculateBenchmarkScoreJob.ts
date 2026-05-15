@@ -14,6 +14,59 @@ function normalize(value: number, reference: number): number {
   return Math.min((value / reference) * SCORE_MAX, SCORE_MAX)
 }
 
+function calcStabilityBonus(payload: BenchmarkPayload): number {
+  let bonus = 0
+  const load = (payload as Record<string, unknown>).load_average as Record<string, number> | undefined
+  const uptime = (payload as Record<string, unknown>).uptime_seconds as number | undefined
+
+  if (load?.['1min'] != null) {
+    const cpuCount = (payload as Record<string, unknown>).cpu_cores as number || 1
+    const loadRatio = load['1min'] / cpuCount
+    // Low load during test = stable system = +bonus
+    if (loadRatio < 0.3) bonus += 3
+    else if (loadRatio < 0.6) bonus += 1
+    else if (loadRatio > 1.5) bonus -= 5
+    else if (loadRatio > 1.0) bonus -= 2
+  }
+
+  if (uptime != null) {
+    const days = uptime / 86400
+    if (days > 30) bonus += 2
+    else if (days < 1) bonus -= 3
+  }
+
+  return Math.max(-10, Math.min(10, bonus))
+}
+
+function calcConfidenceLevel(payload: BenchmarkPayload, resultCount: number): 'low' | 'medium' | 'high' {
+  const hasDisks = ((payload as Record<string, unknown>).disk_results as unknown[])?.length > 0
+  const hasNetwork = ((payload as Record<string, unknown>).network_results as unknown[])?.length > 0
+
+  if (resultCount >= 15 && hasDisks && hasNetwork) return 'high'
+  if (resultCount >= 7) return 'medium'
+  return 'low'
+}
+
+async function calcRegionPercentile(benchmarkId: string, countryCode: string | null, totalScore: number): Promise<number | null> {
+  if (!countryCode) return null
+  try {
+    const scores = await prisma.benchmarkScore.findMany({
+      where: {
+        benchmark: { countryCode, status: 'completed', visibility: 'public' },
+        NOT: { benchmarkId },
+      },
+      select: { totalScore: true },
+      take: 500,
+      orderBy: { createdAt: 'desc' },
+    })
+    if (scores.length === 0) return 50
+    const below = scores.filter(s => (s.totalScore ?? 0) < totalScore).length
+    return Math.round((below / scores.length) * 100)
+  } catch {
+    return null
+  }
+}
+
 export async function calculateBenchmarkScore({ benchmarkId }: { benchmarkId: string }) {
   const benchmark = await prisma.benchmark.findUnique({
     where: { id: benchmarkId },
@@ -79,13 +132,24 @@ export async function calculateBenchmarkScore({ benchmarkId }: { benchmarkId: st
   if (selinux || apparmor) securityScore += 30
   securityScore = Math.min(securityScore, SCORE_MAX)
 
-  // Total weighted score
-  const totalScore =
+  // Smart Scoring: stability bonus
+  const stabilityBonus = calcStabilityBonus(payload)
+
+  // Total weighted score with stability adjustment
+  const baseTotal =
     cpuScore * SCORING_WEIGHTS.cpu +
     diskScore * SCORING_WEIGHTS.disk +
     networkScore * SCORING_WEIGHTS.network +
     memoryScore * SCORING_WEIGHTS.memory +
     securityScore * SCORING_WEIGHTS.security
+
+  const totalScore = Math.max(0, Math.min(SCORE_MAX, baseTotal + stabilityBonus))
+
+  // Confidence level based on result richness
+  const confidenceLevel = calcConfidenceLevel(payload, benchmark.results.length)
+
+  // Region percentile (async, don't block)
+  const regionPercentile = await calcRegionPercentile(benchmarkId, benchmark.countryCode, totalScore)
 
   await prisma.benchmarkScore.create({
     data: {
@@ -96,6 +160,9 @@ export async function calculateBenchmarkScore({ benchmarkId }: { benchmarkId: st
       networkScore: Math.round(networkScore * 10) / 10,
       securityScore: Math.round(securityScore * 10) / 10,
       totalScore: Math.round(totalScore * 10) / 10,
+      stabilityBonus: Math.round(stabilityBonus * 10) / 10,
+      confidenceLevel,
+      regionPercentile,
       scoreVersion: SCORE_VERSION,
     },
   })
@@ -133,5 +200,5 @@ export async function calculateBenchmarkScore({ benchmarkId }: { benchmarkId: st
     queue.add('RefreshStatisticsCache', {}, { priority: 9 }),
   ])
 
-  console.log(`[CalculateScore] Benchmark ${benchmarkId} scored: ${totalScore.toFixed(1)}`)
+  console.log(`[CalculateScore] Benchmark ${benchmarkId} scored: ${totalScore.toFixed(1)} (confidence: ${confidenceLevel}, stability: ${stabilityBonus > 0 ? '+' : ''}${stabilityBonus}, percentile: ${regionPercentile ?? 'n/a'})`)
 }
