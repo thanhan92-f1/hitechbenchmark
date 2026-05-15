@@ -1,0 +1,387 @@
+// HiTech Benchmark - Prisma Schema
+// Plan 02 - Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Enums
+// ============================================================
+
+enum UserRole {
+  user
+  moderator
+  support
+  admin
+  super_admin
+}
+
+enum BenchmarkVisibility {
+  public
+  private
+}
+
+enum BenchmarkStatus {
+  pending
+  processing
+  completed
+  failed
+  flagged
+}
+
+enum BenchmarkCategory {
+  disk
+  cpu
+  memory
+  network
+  security
+}
+
+// ============================================================
+// Users & Auth
+// ============================================================
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      UserRole @default(user)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  apiTokens      ApiToken[]
+  benchmarks     Benchmark[]
+  compareHistory CompareHistory[]
+  auditLogs      AdminAuditLog[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model ApiToken {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  tokenHash  String    @unique
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("api_tokens")
+}
+
+// ============================================================
+// Geography
+// ============================================================
+
+model Country {
+  id        String   @id @default(cuid())
+  code      String   @unique @db.VarChar(2)
+  name      String
+  region    String?
+  flagEmoji String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  asns       Asn[]
+  providers  Provider[]
+  benchmarks Benchmark[]
+  promotions Promotion[]
+
+  @@map("countries")
+}
+
+model Asn {
+  id           String   @id @default(cuid())
+  asnNumber    Int      @unique
+  name         String
+  organization String?
+  countryId    String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  country    Country?    @relation(fields: [countryId], references: [id])
+  benchmarks Benchmark[]
+  providers  Provider[]
+
+  @@index([asnNumber])
+  @@map("asns")
+}
+
+// ============================================================
+// Providers
+// ============================================================
+
+model Provider {
+  id             String   @id @default(cuid())
+  name           String
+  slug           String   @unique
+  websiteUrl     String?
+  logoUrl        String?
+  countryId      String?
+  asnId          String?
+  uptimeRating   Float?
+  avgScore       Float?
+  benchmarkCount Int      @default(0)
+  metadata       Json?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  country    Country?    @relation(fields: [countryId], references: [id])
+  asn        Asn?        @relation(fields: [asnId], references: [id])
+  benchmarks Benchmark[]
+  promotions Promotion[]
+
+  @@index([slug])
+  @@index([isActive, avgScore])
+  @@map("providers")
+}
+
+// ============================================================
+// Benchmarks
+// ============================================================
+
+model Benchmark {
+  id               String              @id @default(cuid())
+  uuid             String              @unique @default(uuid())
+  userId           String?
+  providerId       String?
+  asnId            String?
+  countryId        String?
+  visibility       BenchmarkVisibility @default(public)
+  status           BenchmarkStatus     @default(pending)
+  hostname         String?
+  osName           String?
+  osVersion        String?
+  kernel           String?
+  architecture     String?
+  virtualization   String?
+  cpuModel         String?
+  cpuCores         Int?
+  cpuThreads       Int?
+  cpuFrequencyMhz  Float?
+  ramTotalMb       Int?
+  swapTotalMb      Int?
+  diskTotalGb      Float?
+  uptimeSeconds    BigInt?
+  loadAverage      String?
+  ipv4             String?
+  ipv6             String?
+  reverseDns       String?
+  city             String?
+  region           String?
+  isp              String?
+  organization     String?
+  rawPayload       Json?
+  publicSlug       String?             @unique
+  privateTokenHash String?             @unique
+  trustScore       Float               @default(1.0)
+  clientVersion    String?
+  submitterIp      String?
+  deletedAt        DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  user     User?     @relation(fields: [userId], references: [id])
+  provider Provider? @relation(fields: [providerId], references: [id])
+  asn      Asn?      @relation(fields: [asnId], references: [id])
+  country  Country?  @relation(fields: [countryId], references: [id])
+
+  results   BenchmarkResult[]
+  scores    BenchmarkScore[]
+  locations BenchmarkLocation[]
+  flags     AbuseFlag[]
+
+  @@index([visibility, status, createdAt])
+  @@index([providerId, createdAt])
+  @@index([asnId, createdAt])
+  @@index([publicSlug])
+  @@index([deletedAt, visibility, status])
+  @@map("benchmarks")
+}
+
+model BenchmarkResult {
+  id          String            @id @default(cuid())
+  benchmarkId String
+  category    BenchmarkCategory
+  metricName  String
+  metricValue Float
+  unit        String?
+  metadata    Json?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  benchmark Benchmark @relation(fields: [benchmarkId], references: [id], onDelete: Cascade)
+
+  @@index([benchmarkId, category])
+  @@map("benchmark_results")
+}
+
+model BenchmarkScore {
+  id            String   @id @default(cuid())
+  benchmarkId   String
+  cpuScore      Float?
+  diskScore     Float?
+  memoryScore   Float?
+  networkScore  Float?
+  securityScore Float?
+  totalScore    Float?
+  rankSnapshot  Int?
+  scoreVersion  String   @default("v1")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  benchmark Benchmark @relation(fields: [benchmarkId], references: [id], onDelete: Cascade)
+
+  @@index([totalScore(sort: Desc)])
+  @@index([benchmarkId])
+  @@map("benchmark_scores")
+}
+
+model BenchmarkLocation {
+  id           String   @id @default(cuid())
+  benchmarkId  String
+  testLocation String
+  downloadMbps Float?
+  uploadMbps   Float?
+  pingMs       Float?
+  jitterMs     Float?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  benchmark Benchmark @relation(fields: [benchmarkId], references: [id], onDelete: Cascade)
+
+  @@index([benchmarkId])
+  @@map("benchmark_locations")
+}
+
+// ============================================================
+// Promotions & Deals
+// ============================================================
+
+model Promotion {
+  id          String    @id @default(cuid())
+  providerId  String
+  title       String
+  description String?   @db.Text
+  couponCode  String?
+  price       Float?
+  currency    String?   @default("USD")
+  countryId   String?
+  startsAt    DateTime?
+  endsAt      DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  provider Provider @relation(fields: [providerId], references: [id])
+  country  Country? @relation(fields: [countryId], references: [id])
+
+  @@index([isActive, endsAt])
+  @@index([providerId])
+  @@map("promotions")
+}
+
+// ============================================================
+// Compare History
+// ============================================================
+
+model CompareHistory {
+  id           String   @id @default(cuid())
+  userId       String?
+  benchmarkIds Json?
+  providerIds  Json?
+  compareType  String?
+  shareSlug    String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("compare_history")
+}
+
+// ============================================================
+// Admin
+// ============================================================
+
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  adminUserId String
+  action      String
+  entityType  String
+  entityId    String?
+  oldValues   Json?
+  newValues   Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  adminUser User @relation(fields: [adminUserId], references: [id])
+
+  @@index([adminUserId, createdAt])
+  @@index([entityType, entityId])
+  @@map("admin_audit_logs")
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  group     String?
+  isPublic  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+// ============================================================
+// Security & Anti-Fake
+// ============================================================
+
+model AbuseFlag {
+  id          String   @id @default(cuid())
+  benchmarkId String
+  reason      String
+  severity    String   @default("medium")
+  status      String   @default("pending") // pending, approved, rejected
+  resolvedBy  String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  benchmark Benchmark @relation(fields: [benchmarkId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([benchmarkId])
+  @@map("abuse_flags")
+}
+
+model Nonce {
+  id        String   @id @default(cuid())
+  value     String   @unique
+  usedAt    DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@map("nonces")
+}

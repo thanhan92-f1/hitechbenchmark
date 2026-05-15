@@ -1,0 +1,30 @@
+{
+  "name": "hitechbenchmark",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "type-check": "turbo run type-check",
+    "db:generate": "pnpm --filter @hitechbenchmark/db prisma generate",
+    "db:migrate": "pnpm --filter @hitechbenchmark/db prisma migrate dev",
+    "db:migrate:prod": "pnpm --filter @hitechbenchmark/db prisma migrate deploy",
+    "db:seed": "pnpm --filter @hitechbenchmark/db prisma db seed",
+    "db:studio": "pnpm --filter @hitechbenchmark/db prisma studio",
+    "docker:dev": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}
