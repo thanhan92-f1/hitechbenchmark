@@ -4,12 +4,13 @@ import { useState } from 'react'
 import { Card, CardBody, CardHeader } from '@/components/ui/Card'
 import { GitCompare, Plus, X } from 'lucide-react'
 import { formatMbps, formatScore, getScoreColor, cn } from '@/lib/utils'
+import { ScoreRadarChart } from '@/components/charts/ScoreRadarChart'
 
 export default function ComparePage() {
   const [uuids, setUuids] = useState<string[]>(['', ''])
   const [compareData, setCompareData] = useState<{
     benchmarks: Record<string, string>[];
-    metrics: { category: string; metricName: string; values: { benchmarkId: string; value: number | null }[] }[];
+    metrics: { key: string; category: string; metricName: string; values: { benchmarkId: string; value: number | null }[] }[];
   } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -104,6 +105,32 @@ export default function ComparePage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Radar Chart */}
+      {compareData && compareData.benchmarks.length > 0 && (() => {
+        const scoreKeys = ['totalScore', 'cpuScore', 'diskScore', 'networkScore', 'memoryScore', 'securityScore']
+        const hasScores = compareData.benchmarks.some((b) => scoreKeys.some((k) => b[k] != null))
+        if (!hasScores) return null
+        return (
+          <Card className="mb-6">
+            <CardHeader>
+              <h2 className="font-semibold text-gray-900 dark:text-white">Performance Radar</h2>
+            </CardHeader>
+            <CardBody className="p-0">
+              <ScoreRadarChart
+                data={compareData.benchmarks.map((b) => ({
+                  name: (b.hostname as string) || String(b.uuid).slice(0, 8),
+                  cpu: b.cpuScore != null ? Number(b.cpuScore) : undefined,
+                  disk: b.diskScore != null ? Number(b.diskScore) : undefined,
+                  memory: b.memoryScore != null ? Number(b.memoryScore) : undefined,
+                  network: b.networkScore != null ? Number(b.networkScore) : undefined,
+                  security: b.securityScore != null ? Number(b.securityScore) : undefined,
+                }))}
+              />
+            </CardBody>
+          </Card>
+        )
+      })()}
 
       {/* Results */}
       {compareData && (

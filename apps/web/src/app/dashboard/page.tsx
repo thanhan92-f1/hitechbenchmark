@@ -1,12 +1,12 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
-import { Card, CardBody, CardHeader } from '@/components/ui/Card'
+import { Card, CardBody } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import Link from 'next/link'
 import { BenchmarkCard } from '@/components/benchmark/BenchmarkCard'
 import { Key, Server } from 'lucide-react'
-import { timeAgo } from '@/lib/utils'
+import { VisibilityToggle } from '@/components/dashboard/VisibilityToggle'
+import { ApiTokenManager } from '@/components/dashboard/ApiTokenManager'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
@@ -35,6 +35,7 @@ export default async function DashboardPage() {
     db.apiToken.findMany({
       where: { userId: session.user.id, revokedAt: null },
       orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true, createdAt: true, lastUsedAt: true, expiresAt: true },
     }),
   ])
 
@@ -66,10 +67,11 @@ export default async function DashboardPage() {
                     totalScore: b.scores[0]?.totalScore ?? null,
                   }}
                 />
-                <div className="absolute top-2 right-2 flex gap-1">
-                  <Badge variant={b.visibility === 'public' ? 'success' : 'outline'}>
-                    {b.visibility}
-                  </Badge>
+                <div className="absolute top-2 right-2 flex items-center gap-1">
+                  <VisibilityToggle
+                    uuid={b.uuid}
+                    initial={b.visibility as 'public' | 'private'}
+                  />
                   <Badge
                     variant={
                       b.status === 'completed' ? 'success' :
@@ -98,37 +100,20 @@ export default async function DashboardPage() {
 
       {/* API Tokens */}
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Key className="w-5 h-5 text-blue-600" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">API Tokens</h2>
-          </div>
+        <div className="flex items-center gap-2 mb-4">
+          <Key className="w-5 h-5 text-blue-600" />
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">API Tokens</h2>
         </div>
 
         <Card>
-          {apiTokens.length > 0 ? (
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
-              {apiTokens.map((token) => (
-                <div key={token.id} className="px-6 py-4 flex items-center justify-between">
-                  <div>
-                    <div className="font-medium text-gray-900 dark:text-white">{token.name}</div>
-                    <div className="text-xs text-gray-400 mt-0.5">
-                      Created {timeAgo(token.createdAt)}
-                      {token.lastUsedAt && ` · Last used ${timeAgo(token.lastUsedAt)}`}
-                      {token.expiresAt && ` · Expires ${timeAgo(token.expiresAt)}`}
-                    </div>
-                  </div>
-                  <Badge variant="success">Active</Badge>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <CardBody className="text-center py-8">
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                No API tokens yet. Create one to link benchmark submissions to your account.
-              </p>
-            </CardBody>
-          )}
+          <ApiTokenManager
+            initial={apiTokens.map((t) => ({
+              ...t,
+              createdAt: t.createdAt.toISOString(),
+              lastUsedAt: t.lastUsedAt?.toISOString() ?? null,
+              expiresAt: t.expiresAt?.toISOString() ?? null,
+            }))}
+          />
         </Card>
       </section>
     </div>

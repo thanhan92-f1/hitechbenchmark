@@ -26,6 +26,7 @@ export async function GET(request: Request) {
   const countryCode = searchParams.get('country')
   const providerSlug = searchParams.get('provider')
   const virtualization = searchParams.get('virtualization')
+  const q = searchParams.get('q')?.trim()
   const sortBy = searchParams.get('sort_by') || 'createdAt'
   const sortOrder = (searchParams.get('sort_order') || 'desc') as 'asc' | 'desc'
 
@@ -36,6 +37,16 @@ export async function GET(request: Request) {
     ...(countryCode && { country: { code: countryCode } }),
     ...(providerSlug && { provider: { slug: providerSlug } }),
     ...(virtualization && { virtualization }),
+    ...(q && {
+      OR: [
+        { hostname: { contains: q, mode: 'insensitive' as const } },
+        { cpuModel: { contains: q, mode: 'insensitive' as const } },
+        { ipv4: { contains: q } },
+        { city: { contains: q, mode: 'insensitive' as const } },
+        { isp: { contains: q, mode: 'insensitive' as const } },
+        { organization: { contains: q, mode: 'insensitive' as const } },
+      ],
+    }),
   }
 
   const orderBy: Record<string, string> = {}

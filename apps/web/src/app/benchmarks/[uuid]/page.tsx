@@ -6,8 +6,11 @@ import {
   formatScore, formatDate, getScoreColor, cn
 } from '@/lib/utils'
 import type { Metadata } from 'next'
-import { Cpu, HardDrive, MemoryStick, Globe, Shield, Server, Share2 } from 'lucide-react'
+import { Cpu, HardDrive, MemoryStick, Globe, Shield, Server } from 'lucide-react'
 import { ShareCopy } from '@/components/benchmark/ShareCopy'
+import { ExportJsonButton } from '@/components/benchmark/ExportButton'
+import { NetworkSpeedChart } from '@/components/charts/NetworkSpeedChart'
+import { ScoreRadarChart } from '@/components/charts/ScoreRadarChart'
 
 async function getBenchmark(uuid: string) {
   try {
@@ -116,24 +119,47 @@ export default async function BenchmarkDetailPage({
             <div className="text-4xl font-bold text-gray-300 dark:text-gray-700">—</div>
           )}
           <div className="text-sm text-gray-400 mt-1">Total Score</div>
-          <ShareCopy url={`${siteUrl}/benchmarks/${uuid}`} className="mt-3" />
+          <div className="flex flex-wrap gap-2 mt-3">
+            <ShareCopy url={`${siteUrl}/benchmarks/${uuid}`} />
+            <ExportJsonButton uuid={uuid} />
+          </div>
         </div>
       </div>
 
       {/* Score Breakdown */}
       {scores && (
-        <Card className="mb-6">
-          <CardHeader>
-            <h2 className="font-semibold text-gray-900 dark:text-white">Performance Score</h2>
-          </CardHeader>
-          <CardBody className="space-y-4">
-            <ScoreBar score={scores.cpuScore} label="CPU (30%)" />
-            <ScoreBar score={scores.diskScore} label="Disk (25%)" />
-            <ScoreBar score={scores.networkScore} label="Network (25%)" />
-            <ScoreBar score={scores.memoryScore} label="Memory (15%)" />
-            <ScoreBar score={scores.securityScore} label="Security (5%)" />
-          </CardBody>
-        </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <Card>
+            <CardHeader>
+              <h2 className="font-semibold text-gray-900 dark:text-white">Performance Score</h2>
+            </CardHeader>
+            <CardBody className="space-y-4">
+              <ScoreBar score={scores.cpuScore} label="CPU (30%)" />
+              <ScoreBar score={scores.diskScore} label="Disk (25%)" />
+              <ScoreBar score={scores.networkScore} label="Network (25%)" />
+              <ScoreBar score={scores.memoryScore} label="Memory (15%)" />
+              <ScoreBar score={scores.securityScore} label="Security (5%)" />
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <h2 className="font-semibold text-gray-900 dark:text-white">Score Radar</h2>
+            </CardHeader>
+            <CardBody className="p-0">
+              <ScoreRadarChart
+                data={[{
+                  name: b.hostname || b.ipv4 || 'Benchmark',
+                  cpu: scores.cpuScore ?? undefined,
+                  disk: scores.diskScore ?? undefined,
+                  memory: scores.memoryScore ?? undefined,
+                  network: scores.networkScore ?? undefined,
+                  security: scores.securityScore ?? undefined,
+                }]}
+              />
+            </CardBody>
+          </Card>
+        </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -285,6 +311,7 @@ export default async function BenchmarkDetailPage({
             </div>
           </CardHeader>
           <CardBody>
+            <NetworkSpeedChart locations={b.locations} className="mb-4" />
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
