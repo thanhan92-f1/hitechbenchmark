@@ -67,6 +67,12 @@ print_banner() {
 # Check if command exists
 cmd_exists() { command -v "$1" >/dev/null 2>&1; }
 
+json_has_type() {
+    local json_value="${1:-}"
+    local json_type="$2"
+    printf '%s' "$json_value" | jq -e "type == \"$json_type\"" >/dev/null 2>&1
+}
+
 # Get package manager
 get_pkg_mgr() {
     if cmd_exists apt-get; then echo "apt"
@@ -703,41 +709,57 @@ build_payload() {
         (if $write != "" then {write_speed_mbps: ($write|tonumber)} else {} end)' \
     2>/dev/null || echo '{}')
 
-    if ! echo "${NETWORK_RESULTS:-[]}" | jq -e . >/dev/null 2>&1; then
+    if ! json_has_type "$disk_results" "array"; then
+        warn "Disk results are incomplete; submitting minimal disk details."
+        disk_results='[{"device":"/"}]'
+    fi
+
+    if ! json_has_type "$cpu_results" "object"; then
+        warn "CPU results are incomplete; submitting without CPU benchmark details."
+        cpu_results='{}'
+    fi
+
+    if ! json_has_type "$memory_results" "object"; then
+        warn "Memory results are incomplete; submitting without memory benchmark details."
+        memory_results='{}'
+    fi
+
+    if ! json_has_type "${NETWORK_RESULTS:-[]}" "array"; then
         warn "Network results are incomplete; submitting without location details."
         NETWORK_RESULTS="[]"
     fi
 
-    if ! echo "${SECURITY_JSON:-{}}" | jq -e . >/dev/null 2>&1; then
+    if ! json_has_type "${SECURITY_JSON:-{}}" "object"; then
         warn "Security details are incomplete; submitting without security details."
         SECURITY_JSON="{}"
     fi
 
     # Assemble full payload (without signature)
     local payload_no_sig
+    local payload_error_file="$TMP_DIR/payload-jq-error.log"
     payload_no_sig=$(jq -n \
         --arg bt "$benchmark_type" \
         --arg ver "$SCRIPT_VERSION" \
-        --argjson ts "$timestamp" \
+        --arg ts "$timestamp" \
         --arg nonce "$nonce" \
-        --arg hostname "$HOSTNAME_VAL" \
-        --arg os_name "$OS_NAME" \
-        --arg os_ver "$OS_VERSION" \
-        --arg kernel "$KERNEL" \
-        --arg arch "$ARCH" \
-        --arg virt "$VIRT" \
-        --arg cpu_model "$CPU_MODEL" \
-        --argjson cpu_cores "$CPU_CORES" \
-        --argjson cpu_threads "$CPU_THREADS" \
-        --argjson cpu_freq "${CPU_FREQ:-0}" \
-        --argjson ram_mb "$RAM_TOTAL_MB" \
-        --argjson swap_mb "$SWAP_TOTAL_MB" \
-        --argjson disk_gb "${DISK_TOTAL_GB:-0}" \
-        --argjson uptime "$UPTIME_SECONDS" \
-        --arg load_avg "$LOAD_AVG" \
+        --arg hostname "${HOSTNAME_VAL:-unknown}" \
+        --arg os_name "${OS_NAME:-Unknown}" \
+        --arg os_ver "${OS_VERSION:-}" \
+        --arg kernel "${KERNEL:-}" \
+        --arg arch "${ARCH:-}" \
+        --arg virt "${VIRT:-unknown}" \
+        --arg cpu_model "${CPU_MODEL:-Unknown}" \
+        --arg cpu_cores "${CPU_CORES:-1}" \
+        --arg cpu_threads "${CPU_THREADS:-${CPU_CORES:-1}}" \
+        --arg cpu_freq "${CPU_FREQ:-0}" \
+        --arg ram_mb "${RAM_TOTAL_MB:-64}" \
+        --arg swap_mb "${SWAP_TOTAL_MB:-0}" \
+        --arg disk_gb "${DISK_TOTAL_GB:-0}" \
+        --arg uptime "${UPTIME_SECONDS:-0}" \
+        --arg load_avg "${LOAD_AVG:-}" \
         --arg ipv4 "${IPV4:-}" \
         --arg ipv6 "${IPV6:-}" \
-        --argjson asn "${ASN:-0}" \
+        --arg asn "${ASN:-0}" \
         --arg isp "${ISP:-}" \
         --arg org "${ORG:-}" \
         --arg rdns "${RDNS:-}" \
@@ -787,9 +809,22 @@ build_payload() {
             memory_results: $mem_results,
             network_results: $net_results,
             security: $security
-        }' 2>/dev/null || true)
+        }
+        | .timestamp = (($ts | tonumber?) // 0 | floor)
+        | .system.cpu_cores = (($cpu_cores | tonumber?) // 1 | floor)
+        | .system.cpu_threads = (($cpu_threads | tonumber?) // .system.cpu_cores | floor)
+        | .system.cpu_frequency_mhz = (($cpu_freq | tonumber?) // 0)
+        | .system.ram_total_mb = (($ram_mb | tonumber?) // 64 | floor)
+        | .system.swap_total_mb = (($swap_mb | tonumber?) // 0 | floor)
+        | .system.disk_total_gb = (($disk_gb | tonumber?) // 0)
+        | .system.uptime_seconds = (($uptime | tonumber?) // 0 | floor)
+        | .network.asn = (($asn | tonumber?) // 0 | floor)
+        | if $country == "" then del(.network.country_code) else . end' 2>"$payload_error_file" || true)
 
     if [ -z "$payload_no_sig" ]; then
+        if [ -s "$payload_error_file" ]; then
+            warn "Payload builder error: $(head -n 1 "$payload_error_file")"
+        fi
         err "Cannot assemble benchmark payload"
         return 1
     fi
