@@ -60,7 +60,7 @@ print_banner() {
     echo "  ██║  ██║██║   ██║   ███████╗╚██████╗██║  ██║"
     echo "  ╚═╝  ╚═╝╚═╝   ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝"
     echo ""
-    echo "  ${CYAN}BENCHMARK v${SCRIPT_VERSION}${NC}${BOLD}  |  benchmark.codelab.vn${NC}"
+    echo -e "  ${CYAN}BENCHMARK v${SCRIPT_VERSION}${NC}${BOLD}  |  benchmark.codelab.vn${NC}"
     echo -e "${NC}"
 }
 
@@ -648,6 +648,8 @@ collect_security_info() {
 # Build JSON Payload
 # ============================================================
 build_payload() {
+    section "Preparing Results"
+
     local benchmark_type="$1"
     local timestamp
     timestamp=$(date +%s)
@@ -700,6 +702,16 @@ build_payload() {
         (if $read != "" then {read_speed_mbps: ($read|tonumber)} else {} end) +
         (if $write != "" then {write_speed_mbps: ($write|tonumber)} else {} end)' \
     2>/dev/null || echo '{}')
+
+    if ! echo "${NETWORK_RESULTS:-[]}" | jq -e . >/dev/null 2>&1; then
+        warn "Network results are incomplete; submitting without location details."
+        NETWORK_RESULTS="[]"
+    fi
+
+    if ! echo "${SECURITY_JSON:-{}}" | jq -e . >/dev/null 2>&1; then
+        warn "Security details are incomplete; submitting without security details."
+        SECURITY_JSON="{}"
+    fi
 
     # Assemble full payload (without signature)
     local payload_no_sig
@@ -775,7 +787,7 @@ build_payload() {
             memory_results: $mem_results,
             network_results: $net_results,
             security: $security
-        }' 2>/dev/null)
+        }' 2>/dev/null || true)
 
     if [ -z "$payload_no_sig" ]; then
         err "Cannot assemble benchmark payload"
@@ -783,10 +795,13 @@ build_payload() {
     fi
 
     local signature="0000000000000000000000000000000000000000000000000000000000000000"
+    local generated_signature=""
     if cmd_exists sha256sum; then
-        signature=$(printf '%s:%s:%s' "$nonce" "$timestamp" "$SCRIPT_VERSION" | sha256sum | awk '{print $1}')
+        generated_signature=$(printf '%s:%s:%s' "$nonce" "$timestamp" "$SCRIPT_VERSION" | sha256sum | awk '{print $1}' || true)
+        [ -n "$generated_signature" ] && signature="$generated_signature"
     elif cmd_exists openssl; then
-        signature=$(printf '%s:%s:%s' "$nonce" "$timestamp" "$SCRIPT_VERSION" | openssl dgst -sha256 2>/dev/null | awk '{print $2}' || echo "$signature")
+        generated_signature=$(printf '%s:%s:%s' "$nonce" "$timestamp" "$SCRIPT_VERSION" | openssl dgst -sha256 2>/dev/null | awk '{print $2}' || true)
+        [ -n "$generated_signature" ] && signature="$generated_signature"
     fi
 
     if ! echo "$payload_no_sig" | jq --arg sig "$signature" '. + {signature: $sig}' 2>/dev/null > "$RESULT_FILE"; then
@@ -906,8 +921,15 @@ main() {
     collect_security_info
 
     # Build and submit
-    build_payload "$BENCHMARK_TYPE"
-    submit_benchmark
+    if ! build_payload "$BENCHMARK_TYPE"; then
+        err "Benchmark finished, but the result payload could not be prepared."
+        exit 1
+    fi
+
+    if ! submit_benchmark; then
+        err "Benchmark finished, but submission failed."
+        exit 1
+    fi
 }
 
 main "$@"
