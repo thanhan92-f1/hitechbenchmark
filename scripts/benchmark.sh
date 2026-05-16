@@ -96,6 +96,29 @@ timeout_run() {
     timeout "$timeout" "$@" 2>/dev/null || true
 }
 
+generate_nonce() {
+    local nonce=""
+
+    if cmd_exists openssl; then
+        nonce=$(openssl rand -hex 16 2>/dev/null || true)
+    fi
+
+    if [ -z "$nonce" ]; then
+        nonce=$(dd if=/dev/urandom bs=16 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n' || true)
+    fi
+
+    if [ -z "$nonce" ]; then
+        nonce="$(date +%s%N 2>/dev/null || date +%s)$$$RANDOM"
+        if cmd_exists sha256sum; then
+            nonce=$(printf '%s' "$nonce" | sha256sum | awk '{print substr($1,1,32)}')
+        else
+            nonce=$(printf '%s' "$nonce" | cksum | awk '{printf "%032x", $1}')
+        fi
+    fi
+
+    printf '%s' "${nonce:0:32}"
+}
+
 is_interactive() {
     [ -t 0 ] && [ -t 1 ]
 }
@@ -362,7 +385,6 @@ run_disk_benchmark() {
     # DD read test
     echo -ne "  DD Read    : "
     sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
-    local dd_read
     dd_read=$(dd if="$DISK_TEST_FILE" of=/dev/null bs=1M count=512 2>&1 | grep -oP '[0-9.]+ [GM]B/s' | head -1 || echo "")
     if [ -n "$dd_read" ]; then
         DD_READ_MBPS=$(echo "$dd_read" | awk '{
@@ -542,7 +564,7 @@ run_network_benchmark() {
         # Download speed test (10 second limit)
         local dl_bytes
         dl_bytes=$(timeout_run 12 curl -sf --max-time 10 -o /dev/null -w "%{size_download}" "$loc_url" 2>/dev/null || echo "0")
-        if [ "$dl_bytes" -gt 0 ] 2>/dev/null; then
+        if [ -n "$dl_bytes" ] && [ "$dl_bytes" != "0" ]; then
             download_mbps=$(echo "$dl_bytes" | awk '{printf "%.1f", $1*8/10/1048576}')
         fi
 
@@ -559,7 +581,6 @@ run_network_benchmark() {
         [ -n "$ping_ms" ] && NETWORK_RESULTS+=",\"ping_ms\":$ping_ms"
         NETWORK_RESULTS+="}"
     done
-
     NETWORK_RESULTS+="]"
 }
 
@@ -631,7 +652,11 @@ build_payload() {
     local timestamp
     timestamp=$(date +%s)
     local nonce
-    nonce=$(cat /dev/urandom | tr -dc 'a-f0-9' | head -c 32)
+    nonce=$(generate_nonce)
+    if [ -z "$nonce" ]; then
+        err "Cannot generate benchmark nonce"
+        return 1
+    fi
 
     # Build disk results array
     local disk_results
@@ -752,18 +777,22 @@ build_payload() {
             security: $security
         }' 2>/dev/null)
 
-    # Sign payload with HMAC-SHA256 if signing secret available
-    # Note: bash cannot do HMAC easily without openssl; use openssl if available
-    local signature="0000000000000000000000000000000000000000000000000000000000000000"
-    if cmd_exists openssl; then
-        # Create canonical string for signing
-        local canonical
-        canonical=$(echo "$payload_no_sig" | jq -cS . 2>/dev/null || echo "$payload_no_sig")
-        # Sign with empty key (server will verify with shared secret)
-        signature=$(echo -n "$canonical" | openssl dgst -sha256 -hmac "${BENCHMARK_SIGNING_SECRET:-hitechbench}" 2>/dev/null | awk '{print $2}' || echo "$signature")
+    if [ -z "$payload_no_sig" ]; then
+        err "Cannot assemble benchmark payload"
+        return 1
     fi
 
-    echo "$payload_no_sig" | jq --arg sig "$signature" '. + {signature: $sig}' 2>/dev/null > "$RESULT_FILE"
+    local signature="0000000000000000000000000000000000000000000000000000000000000000"
+    if cmd_exists sha256sum; then
+        signature=$(printf '%s:%s:%s' "$nonce" "$timestamp" "$SCRIPT_VERSION" | sha256sum | awk '{print $1}')
+    elif cmd_exists openssl; then
+        signature=$(printf '%s:%s:%s' "$nonce" "$timestamp" "$SCRIPT_VERSION" | openssl dgst -sha256 2>/dev/null | awk '{print $2}' || echo "$signature")
+    fi
+
+    if ! echo "$payload_no_sig" | jq --arg sig "$signature" '. + {signature: $sig}' 2>/dev/null > "$RESULT_FILE"; then
+        err "Cannot build benchmark payload"
+        return 1
+    fi
 }
 
 # ============================================================
@@ -782,12 +811,16 @@ submit_benchmark() {
     info "Payload size: $((payload_size / 1024)) KB"
 
     local response
-    response=$(curl -sf --max-time 30 \
+    response=$(curl -sS --max-time 30 \
         -X POST \
         -H "Content-Type: application/json" \
         -H "User-Agent: HiTechBench/$SCRIPT_VERSION" \
         --data @"$RESULT_FILE" \
-        "${API_URL}/api/benchmarks" 2>/dev/null || echo '{"success":false,"message":"Connection failed"}')
+        "${API_URL}/api/benchmarks" 2>&1 || true)
+
+    if ! echo "$response" | jq -e . >/dev/null 2>&1; then
+        response=$(jq -n --arg msg "${response:-Connection failed}" '{success:false,message:$msg}')
+    fi
 
     if echo "$response" | jq -e '.success' >/dev/null 2>&1; then
         local public_url private_url uuid

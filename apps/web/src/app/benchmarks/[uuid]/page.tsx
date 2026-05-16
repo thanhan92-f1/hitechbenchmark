@@ -110,6 +110,11 @@ export default async function BenchmarkDetailPage({
               {b.hostname || b.ipv4 || 'Benchmark Result'}
             </h1>
             <Badge variant="success">public</Badge>
+            {b.status && b.status !== 'completed' && (
+              <Badge variant={b.status === 'flagged' || b.status === 'failed' ? 'warning' : 'info'}>
+                {b.status}
+              </Badge>
+            )}
             {b.virtualization && <Badge variant="outline">{b.virtualization.toUpperCase()}</Badge>}
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
@@ -151,6 +156,25 @@ export default async function BenchmarkDetailPage({
           </div>
         </div>
       </div>
+
+      {b.status && b.status !== 'completed' && (
+        <Card className="mb-6 border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-950/20">
+          <CardBody className="flex items-start gap-3">
+            <CheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+            <div>
+              <h2 className="font-semibold text-blue-900 dark:text-blue-200">Benchmark received</h2>
+              <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                Results are being processed. This page will show full scores and rankings once the worker finishes.
+              </p>
+              {b.status === 'flagged' && (
+                <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-2">
+                  This benchmark was flagged for review and may not appear in public rankings.
+                </p>
+              )}
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Score Breakdown */}
       {scores && (

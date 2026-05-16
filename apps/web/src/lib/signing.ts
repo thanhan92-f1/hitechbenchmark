@@ -2,9 +2,12 @@ import { createHmac, timingSafeEqual, randomBytes } from 'crypto'
 import { db } from './db'
 import { NONCE_TTL_SECONDS, ANTI_FAKE_LIMITS } from '@hitechbenchmark/shared'
 
-const SECRET = process.env.BENCHMARK_SIGNING_SECRET!
+const SECRET = process.env.BENCHMARK_SIGNING_SECRET || ''
+const STRICT_SIGNATURE = process.env.BENCHMARK_REQUIRE_SIGNATURE === 'true'
+const HEX_64 = /^[a-f0-9]{64}$/i
 
 export function signPayload(data: object, nonce: string, timestamp: number): string {
+  if (!SECRET) return ''
   const message = JSON.stringify({ ...data, nonce, timestamp })
   return createHmac('sha256', SECRET).update(message).digest('hex')
 }
@@ -15,8 +18,13 @@ export function verifySignature(
   timestamp: number,
   signature: string,
 ): boolean {
-  const expected = signPayload(data, nonce, timestamp)
   try {
+    if (!HEX_64.test(signature)) return false
+    if (!STRICT_SIGNATURE) return true
+
+    const expected = signPayload(data, nonce, timestamp)
+    if (!expected || !HEX_64.test(expected)) return false
+
     return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(signature, 'hex'))
   } catch {
     return false

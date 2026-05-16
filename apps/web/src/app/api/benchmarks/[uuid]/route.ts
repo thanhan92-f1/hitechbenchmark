@@ -11,7 +11,6 @@ export async function GET(
     where: {
       uuid,
       visibility: 'public',
-      status: 'completed',
       deletedAt: null,
     },
     include: {

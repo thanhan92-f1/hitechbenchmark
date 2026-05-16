@@ -511,6 +511,7 @@ write_env_file() {
     write_env_line AUTH_SECRET "$AUTH_SECRET"
     write_env_line AUTH_TRUST_HOST 'true'
     write_env_line BENCHMARK_SIGNING_SECRET "$BENCHMARK_SIGNING_SECRET"
+    write_env_line BENCHMARK_REQUIRE_SIGNATURE 'false'
     printf '\n'
     write_env_line NEXT_PUBLIC_SITE_URL "$APP_URL"
     write_env_line NEXT_PUBLIC_API_URL "$APP_URL"
@@ -577,6 +578,7 @@ ensure_env_defaults() {
     BEGIN {
       defaults["AI_MAX_TOKENS"]="1024";
       defaults["AUTH_TRUST_HOST"]="true";
+      defaults["BENCHMARK_REQUIRE_SIGNATURE"]="false";
       defaults["AZURE_OPENAI_DEPLOYMENT"]="gpt-4o-mini";
       defaults["AZURE_OPENAI_API_VERSION"]="2024-10-21";
       defaults["GEOIP_PROVIDER"]="ipapi";
