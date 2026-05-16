@@ -56,6 +56,14 @@ export interface SystemInfo {
   disk_total_gb: number
   uptime_seconds: number
   load_average: string
+  cpu_temperature_c?: number
+  hypervisor_vendor?: string
+  cloud_provider_detected?: string
+  container_detected?: boolean
+  cgroup_cpu_quota?: string
+  cgroup_cpu_max?: string
+  cgroup_memory_limit_mb?: number
+  cgroup_cpu_shares?: number
 }
 
 export interface NetworkInfo {
@@ -73,6 +81,14 @@ export interface NetworkInfo {
 
 export interface DiskBenchmarkResult {
   device: string
+  model?: string
+  disk_type?: string
+  rotational?: boolean
+  scheduler?: string
+  smart_health?: string
+  nvme_detected?: boolean
+  nvme_model?: string
+  nvme_namespace_count?: number
   dd_write_mbps?: number
   dd_read_mbps?: number
   fio_read_iops?: number
@@ -81,6 +97,14 @@ export interface DiskBenchmarkResult {
   fio_write_mbps?: number
   fio_read_latency_ms?: number
   fio_write_latency_ms?: number
+  fio_4k_qd1_read_iops?: number
+  fio_4k_qd1_read_latency_ms?: number
+  fio_4k_qd32_read_iops?: number
+  fio_4k_qd32_write_iops?: number
+  fio_4k_qd32_read_latency_ms?: number
+  fio_4k_qd32_write_latency_ms?: number
+  fio_seq_read_mbps?: number
+  fio_seq_write_mbps?: number
 }
 
 export interface CpuBenchmarkResult {
@@ -88,12 +112,18 @@ export interface CpuBenchmarkResult {
   sysbench_multi_score?: number
   compression_score?: number
   events_per_second?: number
+  sevenzip_mips?: number
+  gzip_mbps?: number
+  openssl_sha256_mbps?: number
+  openssl_aes256_mbps?: number
 }
 
 export interface MemoryBenchmarkResult {
   read_speed_mbps?: number
   write_speed_mbps?: number
   latency_ns?: number
+  random_read_mbps?: number
+  random_write_mbps?: number
 }
 
 export interface NetworkBenchmarkResult {
@@ -103,16 +133,29 @@ export interface NetworkBenchmarkResult {
   upload_mbps?: number
   ping_ms?: number
   jitter_ms?: number
+  ip_version?: 'ipv4' | 'ipv6' | string
+  test_type?: string
+  protocol?: string
 }
 
 export interface SecurityInfo {
   open_ports?: number[]
   firewall_detected?: boolean
+  firewall_name?: string
+  ufw_status?: string
+  ufw_rules_count?: number
   kernel_hardening?: Record<string, boolean>
   virtualization_type?: string
   cloud_provider?: string
   selinux?: boolean
+  selinux_status?: string
   apparmor?: boolean
+  apparmor_profile_count?: number
+  fail2ban_installed?: boolean
+  fail2ban_active?: boolean
+  ssh_permit_root_login?: string
+  ssh_password_authentication?: string
+  kernel_lockdown?: string
 }
 
 // ============================================================

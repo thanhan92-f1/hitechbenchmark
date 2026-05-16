@@ -16,12 +16,13 @@ function normalize(value: number, reference: number): number {
 
 function calcStabilityBonus(payload: BenchmarkPayload): number {
   let bonus = 0
-  const load = (payload as Record<string, unknown>).load_average as Record<string, number> | undefined
-  const uptime = (payload as Record<string, unknown>).uptime_seconds as number | undefined
+  const loadAverage = payload.system.load_average
+  const uptime = payload.system.uptime_seconds
 
-  if (load?.['1min'] != null) {
-    const cpuCount = (payload as Record<string, unknown>).cpu_cores as number || 1
-    const loadRatio = load['1min'] / cpuCount
+  if (loadAverage) {
+    const load1Min = Number(loadAverage.split(',')[0] || 0)
+    const cpuCount = payload.system.cpu_threads || payload.system.cpu_cores || 1
+    const loadRatio = Number.isFinite(load1Min) ? load1Min / cpuCount : 0
     // Low load during test = stable system = +bonus
     if (loadRatio < 0.3) bonus += 3
     else if (loadRatio < 0.6) bonus += 1
@@ -39,20 +40,20 @@ function calcStabilityBonus(payload: BenchmarkPayload): number {
 }
 
 function calcConfidenceLevel(payload: BenchmarkPayload, resultCount: number): 'low' | 'medium' | 'high' {
-  const hasDisks = ((payload as Record<string, unknown>).disk_results as unknown[])?.length > 0
-  const hasNetwork = ((payload as Record<string, unknown>).network_results as unknown[])?.length > 0
+  const hasDisks = payload.disk_results.length > 0
+  const hasNetwork = payload.network_results.length > 0
 
   if (resultCount >= 15 && hasDisks && hasNetwork) return 'high'
   if (resultCount >= 7) return 'medium'
   return 'low'
 }
 
-async function calcRegionPercentile(benchmarkId: string, countryCode: string | null, totalScore: number): Promise<number | null> {
-  if (!countryCode) return null
+async function calcRegionPercentile(benchmarkId: string, countryId: string | null, totalScore: number): Promise<number | null> {
+  if (!countryId) return null
   try {
     const scores = await prisma.benchmarkScore.findMany({
       where: {
-        benchmark: { countryCode, status: 'completed', visibility: 'public' },
+        benchmark: { countryId, status: 'completed', visibility: 'public' },
         NOT: { benchmarkId },
       },
       select: { totalScore: true },
@@ -85,10 +86,16 @@ export async function calculateBenchmarkScore({ benchmarkId }: { benchmarkId: st
   const cpuResults = benchmark.results.filter((r) => r.category === 'cpu')
   const eps = cpuResults.find((r) => r.metricName === 'Events/s')?.metricValue
   const multiScore = cpuResults.find((r) => r.metricName === 'Sysbench Multi')?.metricValue
-  if (eps) {
-    const single = normalize(eps, 2000)
-    const multi = multiScore ? normalize(multiScore, 2000 * 8) : single * (benchmark.cpuCores || 1) * 0.7
-    cpuScore = single * 0.4 + multi * 0.6
+  const sha256 = cpuResults.find((r) => r.metricName === 'OpenSSL SHA256')?.metricValue
+  const aes256 = cpuResults.find((r) => r.metricName === 'OpenSSL AES-256')?.metricValue
+  const sevenZip = cpuResults.find((r) => r.metricName === '7-Zip')?.metricValue
+  const gzip = cpuResults.find((r) => r.metricName === 'Gzip')?.metricValue
+  if (eps || multiScore || sha256 || aes256 || sevenZip || gzip) {
+    const single = normalize(eps || 0, 2000)
+    const multi = multiScore ? normalize(multiScore, 2000 * 8) : single * Math.min(benchmark.cpuThreads || benchmark.cpuCores || 1, 8) * 0.7
+    const cryptoScore = ((normalize(sha256 || 0, 3000) + normalize(aes256 || 0, 2500)) / 2)
+    const compressionScore = Math.max(normalize(sevenZip || 0, 50000), normalize(gzip || 0, 1500))
+    cpuScore = single * 0.25 + multi * 0.45 + cryptoScore * 0.15 + compressionScore * 0.15
   }
 
   // Disk Score
@@ -96,12 +103,20 @@ export async function calculateBenchmarkScore({ benchmarkId }: { benchmarkId: st
   const diskResults = benchmark.results.filter((r) => r.category === 'disk')
   const readIops = diskResults.find((r) => r.metricName === 'fio_read_iops')?.metricValue
   const writeIops = diskResults.find((r) => r.metricName === 'fio_write_iops')?.metricValue
+  const qd1Iops = diskResults.find((r) => r.metricName === 'fio_4k_qd1_read_iops')?.metricValue
+  const qd32ReadIops = diskResults.find((r) => r.metricName === 'fio_4k_qd32_read_iops')?.metricValue
+  const qd32WriteIops = diskResults.find((r) => r.metricName === 'fio_4k_qd32_write_iops')?.metricValue
   const readMbps = diskResults.find((r) => r.metricName === 'fio_read_mbps' || r.metricName === 'dd_read_mbps')?.metricValue
   const writeMbps = diskResults.find((r) => r.metricName === 'fio_write_mbps' || r.metricName === 'dd_write_mbps')?.metricValue
-  if (readIops || writeMbps) {
-    const iopsScore = ((normalize(readIops || 0, 50000) + normalize(writeIops || 0, 30000)) / 2)
-    const throughput = ((normalize(readMbps || 0, 500) + normalize(writeMbps || 0, 300)) / 2)
-    diskScore = iopsScore * 0.6 + throughput * 0.4
+  const seqReadMbps = diskResults.find((r) => r.metricName === 'fio_seq_read_mbps')?.metricValue
+  const seqWriteMbps = diskResults.find((r) => r.metricName === 'fio_seq_write_mbps')?.metricValue
+  const qd1Latency = diskResults.find((r) => r.metricName === 'fio_4k_qd1_read_latency_ms')?.metricValue
+  if (readIops || writeMbps || qd1Iops || seqReadMbps) {
+    const legacyIopsScore = ((normalize(readIops || qd32ReadIops || 0, 50000) + normalize(writeIops || qd32WriteIops || 0, 30000)) / 2)
+    const qd1Score = normalize(qd1Iops || 0, 12000)
+    const throughput = ((normalize(readMbps || seqReadMbps || 0, 1000) + normalize(writeMbps || seqWriteMbps || 0, 800)) / 2)
+    const latencyScore = qd1Latency ? Math.max(0, SCORE_MAX - normalize(qd1Latency, 5)) : throughput
+    diskScore = legacyIopsScore * 0.35 + qd1Score * 0.25 + throughput * 0.25 + latencyScore * 0.15
   }
 
   // Memory Score
@@ -109,8 +124,14 @@ export async function calculateBenchmarkScore({ benchmarkId }: { benchmarkId: st
   const memResults = benchmark.results.filter((r) => r.category === 'memory')
   const memRead = memResults.find((r) => r.metricName === 'Read Speed')?.metricValue
   const memWrite = memResults.find((r) => r.metricName === 'Write Speed')?.metricValue
-  if (memRead) {
-    memoryScore = normalize(memRead, 10000) * 0.5 + normalize(memWrite || 0, 8000) * 0.5
+  const memRandomRead = memResults.find((r) => r.metricName === 'Random Read')?.metricValue
+  const memRandomWrite = memResults.find((r) => r.metricName === 'Random Write')?.metricValue
+  const memLatency = memResults.find((r) => r.metricName === 'Latency')?.metricValue
+  if (memRead || memRandomRead) {
+    const sequential = normalize(memRead || 0, 10000) * 0.5 + normalize(memWrite || 0, 8000) * 0.5
+    const random = normalize(memRandomRead || 0, 3000) * 0.5 + normalize(memRandomWrite || 0, 2500) * 0.5
+    const latency = memLatency ? Math.max(0, SCORE_MAX - normalize(memLatency, 250000)) : sequential
+    memoryScore = sequential * 0.5 + random * 0.3 + latency * 0.2
   }
 
   // Network Score
@@ -118,7 +139,10 @@ export async function calculateBenchmarkScore({ benchmarkId }: { benchmarkId: st
   if (benchmark.locations.length > 0) {
     const locationScores = benchmark.locations
       .filter((l) => l.downloadMbps)
-      .map((l) => normalize(l.downloadMbps || 0, 500) * 0.6 + normalize(l.uploadMbps || 0, 500) * 0.4)
+      .map((l) => {
+        const latencyScore = l.pingMs ? Math.max(0, SCORE_MAX - normalize(l.pingMs, 250)) : 50
+        return normalize(l.downloadMbps || 0, 500) * 0.5 + normalize(l.uploadMbps || 0, 500) * 0.3 + latencyScore * 0.2
+      })
     networkScore = locationScores.reduce((a, b) => a + b, 0) / Math.max(locationScores.length, 1)
   }
 
@@ -128,8 +152,13 @@ export async function calculateBenchmarkScore({ benchmarkId }: { benchmarkId: st
   const firewall = secResults.find((r) => r.metricName === 'firewall_detected')?.metricValue
   const selinux = secResults.find((r) => r.metricName === 'selinux')?.metricValue
   const apparmor = secResults.find((r) => r.metricName === 'apparmor')?.metricValue
+  const fail2ban = secResults.find((r) => r.metricName === 'fail2ban_active')?.metricValue
+  const openPortsCount = secResults.find((r) => r.metricName === 'open_ports_count')?.metricValue
   if (firewall) securityScore += 20
-  if (selinux || apparmor) securityScore += 30
+  if (selinux || apparmor) securityScore += 20
+  if (fail2ban) securityScore += 10
+  if ((openPortsCount || 0) > 8) securityScore -= 15
+  else if ((openPortsCount || 0) > 4) securityScore -= 5
   securityScore = Math.min(securityScore, SCORE_MAX)
 
   // Smart Scoring: stability bonus
@@ -149,7 +178,7 @@ export async function calculateBenchmarkScore({ benchmarkId }: { benchmarkId: st
   const confidenceLevel = calcConfidenceLevel(payload, benchmark.results.length)
 
   // Region percentile (async, don't block)
-  const regionPercentile = await calcRegionPercentile(benchmarkId, benchmark.countryCode, totalScore)
+  const regionPercentile = await calcRegionPercentile(benchmarkId, benchmark.countryId, totalScore)
 
   await prisma.benchmarkScore.create({
     data: {

@@ -1,4 +1,4 @@
-import { PrismaClient } from '@hitechbenchmark/db'
+import { Prisma, PrismaClient } from '@hitechbenchmark/db'
 
 const prisma = new PrismaClient()
 
@@ -172,7 +172,7 @@ export async function detectPerformanceIssues({ benchmarkId }: { benchmarkId: st
   if (issues.length > 0) {
     await prisma.benchmark.update({
       where: { id: benchmarkId },
-      data: { detectedIssues: issues as unknown as Record<string, unknown>[] },
+      data: { detectedIssues: issues as unknown as Prisma.InputJsonArray },
     })
     console.log(`[IssueDetection] ${benchmarkId}: ${issues.length} issue(s) found`)
   } else {

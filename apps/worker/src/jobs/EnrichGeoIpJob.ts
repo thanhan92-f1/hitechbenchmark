@@ -2,13 +2,24 @@ import { PrismaClient } from '@hitechbenchmark/db'
 
 const prisma = new PrismaClient()
 
+type GeoIpResponse = {
+  status?: string
+  country?: string
+  countryCode?: string
+  region?: string
+  city?: string
+  isp?: string
+  org?: string
+  as?: string
+}
+
 async function lookupGeoIp(ip: string) {
   if (!ip || ip === '127.0.0.1') return null
   try {
     const fields = 'status,country,countryCode,region,city,isp,org,as,timezone'
     const res = await fetch(`http://ip-api.com/json/${ip}?fields=${fields}`)
     if (!res.ok) return null
-    const data = await res.json()
+    const data = await res.json() as GeoIpResponse
     if (data.status !== 'success') return null
 
     let asn: number | undefined

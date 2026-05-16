@@ -1,4 +1,4 @@
-import { PrismaClient } from '@hitechbenchmark/db'
+import { BenchmarkCategory, Prisma, PrismaClient } from '@hitechbenchmark/db'
 import { Queue } from 'bullmq'
 import Redis from 'ioredis'
 
@@ -7,6 +7,45 @@ const connection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', 
   maxRetriesPerRequest: null,
 })
 const queue = new Queue('benchmark', { connection })
+
+type BenchmarkResultCreateInput = {
+  benchmarkId: string
+  category: BenchmarkCategory
+  metricName: string
+  metricValue: number
+  unit?: string
+  metadata?: Prisma.InputJsonObject
+}
+
+function jsonObject(input: Record<string, unknown>): Prisma.InputJsonObject {
+  return Object.fromEntries(
+    Object.entries(input)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => [key, value as Prisma.InputJsonValue]),
+  ) as Prisma.InputJsonObject
+}
+
+function numericMetric(
+  benchmarkId: string,
+  category: BenchmarkCategory,
+  source: Record<string, unknown>,
+  key: string,
+  metricName: string,
+  unit?: string,
+  metadata?: Prisma.InputJsonObject,
+): BenchmarkResultCreateInput | null {
+  const value = source[key]
+  if (typeof value !== 'number' || Number.isNaN(value)) return null
+
+  return {
+    benchmarkId,
+    category,
+    metricName,
+    metricValue: value,
+    ...(unit ? { unit } : {}),
+    ...(metadata ? { metadata } : {}),
+  }
+}
 
 export async function processBenchmarkPayload({ benchmarkId }: { benchmarkId: string }) {
   const benchmark = await prisma.benchmark.findUnique({
@@ -40,18 +79,43 @@ export async function processBenchmarkPayload({ benchmarkId }: { benchmarkId: st
   // Store disk benchmark results
   const diskResults = (raw.disk_results as Record<string, unknown>[]) || []
   if (diskResults.length > 0) {
+    const diskMetricDefs: Array<[string, string, string]> = [
+      ['dd_write_mbps', 'dd_write_mbps', 'MB/s'],
+      ['dd_read_mbps', 'dd_read_mbps', 'MB/s'],
+      ['fio_read_iops', 'fio_read_iops', 'IOPS'],
+      ['fio_write_iops', 'fio_write_iops', 'IOPS'],
+      ['fio_read_mbps', 'fio_read_mbps', 'MB/s'],
+      ['fio_write_mbps', 'fio_write_mbps', 'MB/s'],
+      ['fio_read_latency_ms', 'fio_read_latency_ms', 'ms'],
+      ['fio_write_latency_ms', 'fio_write_latency_ms', 'ms'],
+      ['fio_4k_qd1_read_iops', 'fio_4k_qd1_read_iops', 'IOPS'],
+      ['fio_4k_qd1_read_latency_ms', 'fio_4k_qd1_read_latency_ms', 'ms'],
+      ['fio_4k_qd32_read_iops', 'fio_4k_qd32_read_iops', 'IOPS'],
+      ['fio_4k_qd32_write_iops', 'fio_4k_qd32_write_iops', 'IOPS'],
+      ['fio_4k_qd32_read_latency_ms', 'fio_4k_qd32_read_latency_ms', 'ms'],
+      ['fio_4k_qd32_write_latency_ms', 'fio_4k_qd32_write_latency_ms', 'ms'],
+      ['fio_seq_read_mbps', 'fio_seq_read_mbps', 'MB/s'],
+      ['fio_seq_write_mbps', 'fio_seq_write_mbps', 'MB/s'],
+    ]
+
     await prisma.benchmarkResult.createMany({
-      data: diskResults.flatMap((disk) =>
-        [
-          disk.dd_write_mbps != null && { category: 'disk', metricName: 'dd_write_mbps', metricValue: disk.dd_write_mbps as number, unit: 'MB/s' },
-          disk.dd_read_mbps != null && { category: 'disk', metricName: 'dd_read_mbps', metricValue: disk.dd_read_mbps as number, unit: 'MB/s' },
-          disk.fio_read_iops != null && { category: 'disk', metricName: 'fio_read_iops', metricValue: disk.fio_read_iops as number, unit: 'IOPS' },
-          disk.fio_write_iops != null && { category: 'disk', metricName: 'fio_write_iops', metricValue: disk.fio_write_iops as number, unit: 'IOPS' },
-          disk.fio_read_mbps != null && { category: 'disk', metricName: 'fio_read_mbps', metricValue: disk.fio_read_mbps as number, unit: 'MB/s' },
-          disk.fio_write_mbps != null && { category: 'disk', metricName: 'fio_write_mbps', metricValue: disk.fio_write_mbps as number, unit: 'MB/s' },
-        ].filter((x): x is { category: 'disk'; metricName: string; metricValue: number; unit: string } => Boolean(x))
-          .map((r) => ({ ...r, benchmarkId })),
-      ),
+      data: diskResults.flatMap((disk) => {
+        const metadata = jsonObject({
+          device: disk.device,
+          model: disk.model,
+          diskType: disk.disk_type,
+          rotational: disk.rotational,
+          scheduler: disk.scheduler,
+          smartHealth: disk.smart_health,
+          nvmeDetected: disk.nvme_detected,
+          nvmeModel: disk.nvme_model,
+          nvmeNamespaceCount: disk.nvme_namespace_count,
+        })
+
+        return diskMetricDefs
+          .map(([key, metricName, unit]) => numericMetric(benchmarkId, BenchmarkCategory.disk, disk, key, metricName, unit, metadata))
+          .filter((x): x is BenchmarkResultCreateInput => Boolean(x))
+      }),
     })
   }
 
@@ -63,13 +127,17 @@ export async function processBenchmarkPayload({ benchmarkId }: { benchmarkId: st
       ['sysbench_multi_score', 'Sysbench Multi', 'events/s'],
       ['events_per_second', 'Events/s', 'eps'],
       ['compression_score', 'Compression', 'MB/s'],
+      ['sevenzip_mips', '7-Zip', 'MIPS'],
+      ['gzip_mbps', 'Gzip', 'Mbps'],
+      ['openssl_sha256_mbps', 'OpenSSL SHA256', 'MB/s'],
+      ['openssl_aes256_mbps', 'OpenSSL AES-256', 'MB/s'],
     ]
     await prisma.benchmarkResult.createMany({
       data: cpuMetrics
         .filter(([key]) => cpuResults[key] != null)
         .map(([key, name, unit]) => ({
           benchmarkId,
-          category: 'cpu' as const,
+          category: BenchmarkCategory.cpu,
           metricName: name,
           metricValue: cpuResults[key] as number,
           unit,
@@ -84,13 +152,15 @@ export async function processBenchmarkPayload({ benchmarkId }: { benchmarkId: st
       ['read_speed_mbps', 'Read Speed', 'MB/s'],
       ['write_speed_mbps', 'Write Speed', 'MB/s'],
       ['latency_ns', 'Latency', 'ns'],
+      ['random_read_mbps', 'Random Read', 'MB/s'],
+      ['random_write_mbps', 'Random Write', 'MB/s'],
     ]
     await prisma.benchmarkResult.createMany({
       data: memMetrics
         .filter(([key]) => memResults[key] != null)
         .map(([key, name, unit]) => ({
           benchmarkId,
-          category: 'memory' as const,
+          category: BenchmarkCategory.memory,
           metricName: name,
           metricValue: memResults[key] as number,
           unit,
@@ -103,10 +173,29 @@ export async function processBenchmarkPayload({ benchmarkId }: { benchmarkId: st
   if (security) {
     await prisma.benchmarkResult.createMany({
       data: [
-        { benchmarkId, category: 'security' as const, metricName: 'firewall_detected', metricValue: security.firewall_detected ? 1 : 0 },
-        { benchmarkId, category: 'security' as const, metricName: 'selinux', metricValue: security.selinux ? 1 : 0 },
-        { benchmarkId, category: 'security' as const, metricName: 'apparmor', metricValue: security.apparmor ? 1 : 0 },
-      ],
+        { benchmarkId, category: BenchmarkCategory.security, metricName: 'firewall_detected', metricValue: security.firewall_detected ? 1 : 0 },
+        { benchmarkId, category: BenchmarkCategory.security, metricName: 'selinux', metricValue: security.selinux ? 1 : 0 },
+        { benchmarkId, category: BenchmarkCategory.security, metricName: 'apparmor', metricValue: security.apparmor ? 1 : 0 },
+        { benchmarkId, category: BenchmarkCategory.security, metricName: 'fail2ban_active', metricValue: security.fail2ban_active ? 1 : 0 },
+        { benchmarkId, category: BenchmarkCategory.security, metricName: 'ufw_rules_count', metricValue: typeof security.ufw_rules_count === 'number' ? security.ufw_rules_count : 0 },
+        { benchmarkId, category: BenchmarkCategory.security, metricName: 'open_ports_count', metricValue: Array.isArray(security.open_ports) ? security.open_ports.length : 0 },
+      ].map((result) => ({
+        ...result,
+        metadata: jsonObject({
+          firewallName: security.firewall_name,
+          ufwStatus: security.ufw_status,
+          openPorts: security.open_ports,
+          selinuxStatus: security.selinux_status,
+          apparmorProfileCount: security.apparmor_profile_count,
+          fail2banInstalled: security.fail2ban_installed,
+          sshPermitRootLogin: security.ssh_permit_root_login,
+          sshPasswordAuthentication: security.ssh_password_authentication,
+          kernelLockdown: security.kernel_lockdown,
+          kernelHardening: security.kernel_hardening,
+          virtualizationType: security.virtualization_type,
+          cloudProvider: security.cloud_provider,
+        }),
+      })),
     })
   }
 
@@ -121,6 +210,12 @@ export async function processBenchmarkPayload({ benchmarkId }: { benchmarkId: st
         uploadMbps: n.upload_mbps as number | null,
         pingMs: n.ping_ms as number | null,
         jitterMs: n.jitter_ms as number | null,
+        metadata: jsonObject({
+          serverHost: n.server_host,
+          ipVersion: n.ip_version,
+          testType: n.test_type,
+          protocol: n.protocol,
+        }),
       })),
     })
   }

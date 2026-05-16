@@ -1,4 +1,4 @@
-import { PrismaClient } from '@hitechbenchmark/db'
+import { Prisma, PrismaClient } from '@hitechbenchmark/db'
 import { aiComplete } from '../lib/ai-client'
 
 const prisma = new PrismaClient()
@@ -81,7 +81,7 @@ Respond with JSON matching this schema exactly:
     await prisma.benchmark.update({
       where: { id: benchmarkId },
       data: {
-        aiAnalysis: analysis as unknown as Record<string, unknown>,
+        aiAnalysis: analysis as unknown as Prisma.InputJsonObject,
         aiAnalyzedAt: new Date(),
       },
     })
