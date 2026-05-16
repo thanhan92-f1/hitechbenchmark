@@ -6,9 +6,6 @@ const nextConfig: NextConfig = {
   // Transpile monorepo packages
   transpilePackages: ['@hitechbenchmark/shared', '@hitechbenchmark/db'],
 
-  // Standalone output for Docker
-  output: 'standalone',
-
   // Experimental features
   experimental: {
     // Server Actions enabled by default in Next.js 15

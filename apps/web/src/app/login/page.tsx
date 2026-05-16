@@ -1,7 +1,7 @@
 'use client'
 
 import { signIn } from 'next-auth/react'
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Server, CheckCircle } from 'lucide-react'
@@ -35,7 +35,7 @@ function OAuthButton({
   )
 }
 
-export default function LoginPage() {
+function LoginContent() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -179,5 +179,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-[80vh] flex items-center justify-center px-4 text-gray-500 dark:text-gray-400">Loading sign in…</div>}>
+      <LoginContent />
+    </Suspense>
   )
 }

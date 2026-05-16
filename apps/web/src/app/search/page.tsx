@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useTransition } from 'react'
+import { Suspense, useState, useCallback, useTransition } from 'react'
 import { Search, SlidersHorizontal, Server, ChevronDown, ChevronUp } from 'lucide-react'
 import { BenchmarkCard } from '@/components/benchmark/BenchmarkCard'
 import { Card, CardBody } from '@/components/ui/Card'
@@ -55,7 +55,7 @@ interface Benchmark {
   provider?: { name: string; slug: string }
 }
 
-export default function SearchPage() {
+function SearchContent() {
   const router = useRouter()
   const sp = useSearchParams()
 
@@ -331,5 +331,13 @@ export default function SearchPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center text-gray-500 dark:text-gray-400">Loading search…</div>}>
+      <SearchContent />
+    </Suspense>
   )
 }

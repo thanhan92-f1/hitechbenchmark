@@ -4,8 +4,10 @@
   "private": true,
   "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
+    "build": "dotenv -e .env -- turbo run build",
+    "dev": "dotenv -e .env -- turbo run dev",
+    "start": "dotenv -e .env -- pnpm --filter @hitechbenchmark/web start",
+    "start:worker": "dotenv -e .env -- pnpm --filter @hitechbenchmark/worker start",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "type-check": "turbo run type-check",
@@ -14,7 +16,7 @@
     "db:migrate:prod": "dotenv -e .env -- pnpm --filter @hitechbenchmark/db exec prisma migrate deploy",
     "db:seed": "dotenv -e .env -- pnpm --filter @hitechbenchmark/db exec tsx prisma/seed.ts",
     "db:studio": "dotenv -e .env -- pnpm --filter @hitechbenchmark/db exec prisma studio",
-    "docker:dev": "docker compose up -d",
+    "docker:dev": "docker compose up -d database",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f"
   },

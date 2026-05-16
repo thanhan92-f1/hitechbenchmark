@@ -2,247 +2,206 @@
 
 ## Architecture Overview
 
-```
-Internet → Nginx (reverse proxy + TLS)
-                ↓
-         Next.js Web App  ←→  PostgreSQL 16
-                ↓
-         BullMQ Worker    ←→  Redis 7
+```text
+Internet → Host Nginx + TLS → Host Next.js web process
+                                  ↓
+                            PostgreSQL 16 in Docker
+                                  ↓
+                          Host BullMQ worker → Host Redis
 ```
 
-All services run as Docker containers managed by `docker compose`.
-
----
+Docker Compose is intentionally limited to PostgreSQL. Node.js, pnpm, Redis, Nginx, the web app, and the worker run on the host.
 
 ## Requirements
 
-- VPS/server with at least 2 vCPU, 2 GB RAM
-- Docker Engine 24+ and Docker Compose v2
-- Domain name with DNS pointed to the server
-- (Optional) Anthropic/OpenAI API key for AI analysis
+- Linux VPS/server with at least 2 vCPU and 2 GB RAM.
+- Domain name with DNS pointing to the server.
+- Root or sudo access.
+- Optional AI provider API key.
 
----
+The installer supports common Linux package managers: `apt`, `dnf`, `yum`, `pacman`, and `apk`.
 
-## Deployment Steps
+## Recommended Installation
 
-### 1. Clone the repository
+Clone the project and run the root installer:
 
 ```bash
 git clone <repo-url> /opt/hitechbenchmark
 cd /opt/hitechbenchmark
+bash install.sh
 ```
 
-### 2. Configure environment
+The installer asks for:
+
+- Linux service user.
+- Domains and primary domain.
+- Host web port, default `3000`.
+- HTTPS/Certbot preference.
+- PostgreSQL password.
+- Auth and benchmark signing secrets.
+- AI provider settings.
+- SMTP settings.
+- Seed preference.
+
+Then it:
+
+- Generates root `.env`.
+- Installs host Node.js, pnpm, Redis, Nginx, Certbot, Docker, and Compose when needed.
+- Starts the PostgreSQL container with `docker compose up -d database`.
+- Installs dependencies with pnpm.
+- Generates Prisma client, builds the app, applies migrations, and optionally seeds data.
+- Creates `hitechbenchmark-web` and `hitechbenchmark-worker` systemd services.
+- Writes a host Nginx site and optionally requests a Let's Encrypt certificate.
+
+## Manual Deployment Notes
+
+### Root `.env`
+
+Use one root `.env` only:
 
 ```bash
-cp apps/web/.env.example apps/web/.env
-cp apps/worker/.env.example apps/worker/.env
+cp .env.example .env
 ```
 
-Edit `apps/web/.env`:
+Do not create `apps/web/.env` or `apps/worker/.env`.
+
+Required production values include:
 
 ```env
-DATABASE_URL=postgresql://hitechbenchmark:STRONG_PASSWORD@postgres:5432/hitechbenchmark
+NODE_ENV=production
+APP_URL=https://yourdomain.com
+APP_PORT=3000
+POSTGRES_PASSWORD=replace-with-strong-password
+DATABASE_URL=postgresql://hitechbench:replace-with-strong-password@localhost:5432/hitechbenchmark
+REDIS_URL=redis://localhost:6379
 NEXTAUTH_URL=https://yourdomain.com
-NEXTAUTH_SECRET=<run: openssl rand -base64 32>
+NEXTAUTH_SECRET=replace-with-random-secret
+AUTH_SECRET=replace-with-random-secret
+BENCHMARK_SIGNING_SECRET=replace-with-random-secret
 NEXT_PUBLIC_SITE_URL=https://yourdomain.com
-REDIS_URL=redis://redis:6379
+NEXT_PUBLIC_API_URL=https://yourdomain.com
+NEXT_PUBLIC_WS_URL=wss://yourdomain.com
 ```
 
-Edit `apps/worker/.env`:
-
-```env
-DATABASE_URL=postgresql://hitechbenchmark:STRONG_PASSWORD@postgres:5432/hitechbenchmark
-REDIS_URL=redis://redis:6379
-AI_PROVIDER=anthropic
-AI_API_KEY=sk-ant-...
-```
-
-### 3. Configure Nginx
-
-Edit `docker/nginx/nginx.conf` — replace `yourdomain.com` with your domain.
-
-For HTTPS (recommended), use Certbot:
+Generate secrets with:
 
 ```bash
-# Install certbot on the host
-apt install certbot
-
-# Get certificate
-certbot certonly --standalone -d yourdomain.com
-
-# Certificates are in /etc/letsencrypt/live/yourdomain.com/
-# Mount them into the nginx container (see docker-compose.yml volumes)
+openssl rand -base64 48
 ```
 
-### 4. Build and start
+### PostgreSQL Container
+
+Start PostgreSQL only:
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d --build
+docker compose up -d database
+docker compose logs -f database
 ```
 
-### 5. Run database migrations
+The database is bound to `127.0.0.1:5432` and is not exposed publicly.
+
+### Host Dependencies
+
+Install Node.js 20 or newer, pnpm 9, Redis, and Nginx on the host. The installer targets Node.js 22 and pnpm 9.15.0.
+
+### Build and Migrate
 
 ```bash
-docker compose exec web pnpm --filter @hitechbenchmark/db db:migrate:deploy
+pnpm install --frozen-lockfile --prod=false
+pnpm db:generate
+pnpm build
+pnpm db:migrate:prod
+pnpm db:seed
 ```
 
-### 6. Create admin user
+### Systemd Services
+
+The installer writes systemd services automatically. Typical manual commands are:
 
 ```bash
-docker compose exec web node -e "
-const { PrismaClient } = require('@hitechbenchmark/db');
-const bcrypt = require('bcryptjs');
-const prisma = new PrismaClient();
-prisma.user.create({
-  data: {
-    email: 'admin@yourdomain.com',
-    password: bcrypt.hashSync('your-password', 10),
-    role: 'admin',
-    isVerified: true,
-  }
-}).then(u => console.log('Created:', u.email)).finally(() => prisma.\$disconnect());
-"
+systemctl status hitechbenchmark-web
+systemctl status hitechbenchmark-worker
+journalctl -u hitechbenchmark-web -f
+journalctl -u hitechbenchmark-worker -f
 ```
 
----
+The web process should bind only to `127.0.0.1:${APP_PORT}` and be reached through Nginx.
 
-## Docker Compose Reference
+## Nginx and HTTPS
 
-```yaml
-# docker/docker-compose.yml (production)
-services:
-  postgres:
-    image: postgres:16-alpine
-    restart: always
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    environment:
-      POSTGRES_DB: hitechbenchmark
-      POSTGRES_USER: hitechbenchmark
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+The generated Nginx site proxies public traffic to `127.0.0.1:${APP_PORT}`. A reference configuration is available at `docker/nginx/nginx.conf`.
 
-  redis:
-    image: redis:7-alpine
-    restart: always
-    volumes:
-      - redis_data:/data
+For HTTPS, the installer can run Certbot. Manual certificate issuance example:
 
-  web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-    restart: always
-    env_file: apps/web/.env
-    depends_on: [postgres, redis]
-    ports: ["3000:3000"]
-
-  worker:
-    build:
-      context: .
-      dockerfile: apps/worker/Dockerfile
-    restart: always
-    env_file: apps/worker/.env
-    depends_on: [postgres, redis]
-
-  nginx:
-    image: nginx:alpine
-    restart: always
-    ports: ["80:80", "443:443"]
-    volumes:
-      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-    depends_on: [web]
-
-volumes:
-  postgres_data:
-  redis_data:
+```bash
+certbot --nginx -d yourdomain.com --redirect --agree-tos -m admin@yourdomain.com --no-eff-email
 ```
-
----
 
 ## Maintenance
 
-### Update to latest version
+### Update Application
 
 ```bash
 git pull
-docker compose -f docker/docker-compose.yml up -d --build
-docker compose exec web pnpm --filter @hitechbenchmark/db db:migrate:deploy
+pnpm install --frozen-lockfile --prod=false
+pnpm db:generate
+pnpm build
+pnpm db:migrate:prod
+systemctl restart hitechbenchmark-web hitechbenchmark-worker
 ```
 
-### View logs
+### View Logs
 
 ```bash
-docker compose logs -f web
-docker compose logs -f worker
-docker compose logs -f nginx
+journalctl -u hitechbenchmark-web -f
+journalctl -u hitechbenchmark-worker -f
+docker compose logs -f database
 ```
 
-### Backup database
+### Backup Database
 
 ```bash
-docker compose exec postgres pg_dump -U hitechbenchmark hitechbenchmark \
+docker compose exec -T database pg_dump -U hitechbench hitechbenchmark \
   | gzip > backup-$(date +%Y%m%d).sql.gz
 ```
 
-### Restore database
+### Restore Database
 
 ```bash
 gunzip -c backup-20240101.sql.gz \
-  | docker compose exec -T postgres psql -U hitechbenchmark hitechbenchmark
+  | docker compose exec -T database psql -U hitechbench hitechbenchmark
 ```
-
----
 
 ## Security Checklist
 
-- [ ] `NEXTAUTH_SECRET` is random (min 32 chars)
-- [ ] Database password is strong
-- [ ] Nginx serves HTTPS only (HTTP redirects to HTTPS)
-- [ ] Ports 5432 (PostgreSQL) and 6379 (Redis) are not exposed to the internet
-- [ ] Server firewall allows only 80 and 443
-- [ ] Automatic security updates enabled (`unattended-upgrades`)
-- [ ] Admin accounts use strong passwords
-
----
+- [ ] Root `.env` is mode `600` and readable by the service user only.
+- [ ] `NEXTAUTH_SECRET`, `AUTH_SECRET`, and `BENCHMARK_SIGNING_SECRET` are random.
+- [ ] PostgreSQL password is strong.
+- [ ] PostgreSQL is bound to `127.0.0.1:5432` only.
+- [ ] Redis is bound to localhost or firewalled from the internet.
+- [ ] Nginx terminates HTTPS and redirects HTTP to HTTPS.
+- [ ] Firewall allows only required public ports, usually `80` and `443`.
+- [ ] Admin users use MFA and strong passwords.
 
 ## Monitoring
 
-### Health checks
+Health check:
 
 ```bash
-# Web app
 curl https://yourdomain.com/api/health
-
-# Worker job queue (via Redis)
-docker compose exec redis redis-cli info stats | grep processed
 ```
 
-### Resource usage
+Host service health:
 
 ```bash
-docker stats
+systemctl is-active hitechbenchmark-web
+systemctl is-active hitechbenchmark-worker
+redis-cli ping
+docker compose ps database
 ```
 
-For production monitoring, consider:
-- **Uptime monitoring**: UptimeRobot, Betterstack (free tier available)
-- **Error tracking**: Sentry (`NEXT_PUBLIC_SENTRY_DSN`)
-- **Metrics**: Prometheus + Grafana (add to docker-compose.yml)
-
----
+For production monitoring, consider UptimeRobot or Better Stack for uptime and Sentry for application errors.
 
 ## Scaling
 
-The worker is stateless and can be scaled horizontally:
-
-```bash
-docker compose up -d --scale worker=3
-```
-
-BullMQ handles distributed job processing automatically via Redis.
-
-For high traffic, consider:
-- Moving PostgreSQL to a managed service (RDS, Supabase, Neon)
-- Moving Redis to a managed service (Upstash, Redis Cloud)
-- Deploying the web app to Vercel/Railway and only self-hosting the worker
+The worker is stateless. For higher throughput, run additional host worker services or move Redis/PostgreSQL to managed services. Keep the public web process behind Nginx, and keep database and Redis private.

@@ -10,6 +10,8 @@ import { ApiTokenManager } from '@/components/dashboard/ApiTokenManager'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: 'Dashboard',
   robots: { index: false, follow: false },

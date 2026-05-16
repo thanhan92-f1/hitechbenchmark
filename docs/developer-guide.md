@@ -2,7 +2,7 @@
 
 ## Monorepo Structure
 
-```
+```text
 hitechbenchmark/
 ├── apps/
 │   ├── web/                  # Next.js 15 (App Router)
@@ -10,13 +10,13 @@ hitechbenchmark/
 │   │   │   ├── app/          # Pages + API routes
 │   │   │   ├── components/   # React components
 │   │   │   └── lib/          # Utilities, auth, db helpers
-│   │   └── Dockerfile
+│   │   └── package.json
 │   └── worker/               # BullMQ job processor
 │       ├── src/
 │       │   ├── jobs/         # Job handler functions
 │       │   ├── lib/          # ai-client, utilities
 │       │   └── index.ts      # Worker entry point
-│       └── Dockerfile
+│       └── package.json
 ├── packages/
 │   ├── db/                   # Prisma schema + generated client
 │   │   ├── prisma/
@@ -25,8 +25,9 @@ hitechbenchmark/
 │   │   └── package.json
 │   └── shared/               # Shared types + constants
 ├── docker/
-│   ├── nginx/nginx.conf
-│   └── docker-compose.yml
+│   └── nginx/nginx.conf       # Host Nginx reference config
+├── docker-compose.yml        # PostgreSQL container only
+├── install.sh                # Host Node.js production installer
 └── docs/
 ```
 
@@ -35,12 +36,12 @@ hitechbenchmark/
 ## Tech Stack
 
 | Layer | Technology |
-|---|---|
+| --- | --- |
 | Framework | Next.js 15 (App Router, React 19) |
 | Styling | Tailwind CSS v4 |
-| Database | PostgreSQL 16 via Prisma ORM |
+| Database | PostgreSQL 16 via Prisma ORM, Docker Compose container only |
 | Auth | NextAuth.js v4 |
-| Job Queue | BullMQ + Redis |
+| Job Queue | BullMQ + host Redis |
 | Charts | Recharts |
 | AI | Anthropic SDK / OpenAI SDK (multi-provider) |
 | Package Manager | pnpm workspaces + Turborepo |
@@ -125,7 +126,7 @@ await getQueue().add(JOB_NAMES.MY_JOB, { someId: '...' }, { priority: 5 })
 ## Job Priority Convention
 
 | Priority | Use |
-|---|---|
+| --- | --- |
 | 1 | Critical (score calculation) |
 | 2 | Detection (fake benchmark) |
 | 3 | Score finalization |
@@ -171,7 +172,7 @@ Located in `apps/web/src/components/ui/`. Minimal custom components built on Tai
 ## Key Utility Functions (`apps/web/src/lib/utils.ts`)
 
 | Function | Purpose |
-|---|---|
+| --- | --- |
 | `apiResponse(data, meta?)` | Wrap data in `{ success: true, data }` |
 | `apiError(message, status)` | Return `{ success: false, error }` with HTTP status |
 | `formatRAM(mb)` | `8192 → "8 GB"` |
@@ -218,7 +219,7 @@ Results stored as `benchmark.detectedIssues` (JSON array).
 
 57 tools organized under `apps/web/src/app/tools/`:
 
-```
+```text
 tools/
 ├── ssl/            # SSL certificate checker
 ├── domain/         # WHOIS, DNS records, propagation

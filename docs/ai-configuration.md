@@ -1,10 +1,10 @@
 # AI Provider Configuration
 
-HiTech Benchmark supports 8 AI providers for the AI performance analysis feature. Configure via environment variables in the worker service.
+HiTech Benchmark supports 8 AI providers for the AI performance analysis feature. Configure them in the single root `.env` file.
 
 ## Quick Start
 
-Set two variables in `apps/worker/.env`:
+Set two variables in root `.env`:
 
 ```env
 AI_PROVIDER=anthropic
@@ -16,7 +16,7 @@ AI_API_KEY=sk-ant-...
 ## Supported Providers
 
 | Provider | `AI_PROVIDER` | Default Model | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Anthropic Claude | `anthropic` | `claude-haiku-4-5-20251001` | Native SDK, prompt caching |
 | OpenAI | `openai` | `gpt-4o-mini` | — |
 | Azure OpenAI | `azure` | `gpt-4o-mini` | Requires extra vars |
@@ -156,7 +156,7 @@ AI_PROVIDER=disabled
 Analysis runs once per benchmark. Typical usage:
 
 | Provider | Model | ~Cost/analysis |
-|---|---|---|
+| --- | --- | --- |
 | Anthropic | claude-haiku-4-5-20251001 | ~$0.0001 |
 | OpenAI | gpt-4o-mini | ~$0.0002 |
 | Groq | llama-3.1-8b-instant | Free (rate limits) |
@@ -166,15 +166,18 @@ Analysis runs once per benchmark. Typical usage:
 
 ## Troubleshooting
 
-**AI analysis not appearing on benchmark pages**
-- Check worker logs: `docker compose logs worker`
-- Verify `AI_PROVIDER` and `AI_API_KEY` are set in worker env
-- For Ollama/LM Studio: ensure the local server is running and accessible from the worker container (`AI_BASE_URL=http://host.docker.internal:11434/v1`)
+### AI analysis not appearing on benchmark pages
 
-**"No API key set — skipping"**
+- Check worker logs: `journalctl -u hitechbenchmark-worker -f`
+- Verify `AI_PROVIDER` and `AI_API_KEY` are set in root `.env`.
+- For Ollama/LM Studio: ensure the local server is running on the host (`AI_BASE_URL=http://localhost:11434/v1`)
+
+### "No API key set — skipping"
+
 - The worker logs this at WARNING level when `AI_API_KEY` is empty for non-local providers
-- Add the key to `apps/worker/.env` and restart the worker
+- Add the key to root `.env` and restart the worker: `systemctl restart hitechbenchmark-worker`
 
-**JSON parse error in worker logs**
+### JSON parse error in worker logs
+
 - The model returned malformed JSON; try a different/larger model
 - Increase `AI_MAX_TOKENS` if responses are being truncated

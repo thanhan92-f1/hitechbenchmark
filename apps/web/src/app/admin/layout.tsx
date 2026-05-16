@@ -7,6 +7,8 @@ import {
   FileText, Settings, Activity,
 } from 'lucide-react'
 
+export const dynamic = 'force-dynamic'
+
 const ADMIN_ROLES = ['super_admin', 'admin', 'moderator', 'support']
 
 const navItems = [

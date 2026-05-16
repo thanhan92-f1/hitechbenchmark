@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Shield, Smartphone, Mail, Key, CheckCircle, XCircle, Trash2, Plus, AlertTriangle } from 'lucide-react'
 import { startRegistration } from '@simplewebauthn/browser'
 import Image from 'next/image'
+
+export const dynamic = 'force-dynamic'
 
 interface Passkey {
   id: string
@@ -22,7 +23,6 @@ interface MfaStatus {
 }
 
 export default function SecurityPage() {
-  const { data: session } = useSession()
   const [status, setStatus] = useState<MfaStatus | null>(null)
   const [loading, setLoading] = useState(true)
 

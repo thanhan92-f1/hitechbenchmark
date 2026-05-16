@@ -7,10 +7,14 @@ import { Card, CardBody } from '@/components/ui/Card'
 import { Shield, Smartphone, Mail, Key, RefreshCw, ArrowRight, CheckCircle } from 'lucide-react'
 import { startAuthentication } from '@simplewebauthn/browser'
 
+export const dynamic = 'force-dynamic'
+
 type Method = 'totp' | 'email' | 'passkey'
 
 export default function MfaChallengePage() {
-  const { data: session, update } = useSession()
+  const sessionState = useSession()
+  const session = sessionState?.data
+  const updateSession = sessionState?.update
   const router = useRouter()
   const [method, setMethod] = useState<Method>('totp')
   const [code, setCode] = useState('')
@@ -94,7 +98,7 @@ export default function MfaChallengePage() {
 
   async function completeVerification() {
     setVerified(true)
-    await update({ mfaRequired: false })
+    await updateSession?.({ mfaRequired: false })
     setTimeout(() => router.push('/dashboard'), 1000)
   }
 
