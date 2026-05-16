@@ -146,14 +146,25 @@ async function main() {
 
   // Seed admin user
   const adminPassword = createHash('sha256').update('admin123456').digest('hex')
+  const adminVerifiedAt = new Date()
   await prisma.user.upsert({
     where: { email: 'admin@hitechbenchmark.com' },
-    update: {},
+    update: {
+      role: 'super_admin',
+      isActive: true,
+      isEmailVerified: true,
+      emailVerified: adminVerifiedAt,
+      emailVerifiedAt: adminVerifiedAt,
+    },
     create: {
       name: 'Admin',
       email: 'admin@hitechbenchmark.com',
       password: adminPassword,
       role: 'super_admin',
+      isActive: true,
+      isEmailVerified: true,
+      emailVerified: adminVerifiedAt,
+      emailVerifiedAt: adminVerifiedAt,
     },
   })
 

@@ -96,6 +96,66 @@ timeout_run() {
     timeout "$timeout" "$@" 2>/dev/null || true
 }
 
+is_interactive() {
+    [ -t 0 ] && [ -t 1 ]
+}
+
+normalize_choice() {
+    local value="${1:-}"
+    value="${value,,}"
+    case "$value" in
+        2|private|priv|pvt) echo "private" ;;
+        *) echo "public" ;;
+    esac
+}
+
+parse_args() {
+    BENCHMARK_TYPE=""
+    ASSUME_YES="false"
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --private)
+                BENCHMARK_TYPE="private"
+                ;;
+            --public)
+                BENCHMARK_TYPE="public"
+                ;;
+            --type)
+                if [ $# -lt 2 ]; then
+                    err "--type requires public or private"
+                    exit 1
+                fi
+                shift
+                BENCHMARK_TYPE="$(normalize_choice "$1")"
+                ;;
+            --yes|-y)
+                ASSUME_YES="true"
+                ;;
+            --help|-h)
+                cat <<HELP
+HiTech Benchmark
+
+Usage:
+  curl -sL ${API_URL}/install | bash
+  curl -sL ${API_URL}/install | bash -s -- --private
+    bash <(wget -qO- ${API_URL}/install) --private --yes
+
+Options:
+  --public        Public result, appears in rankings. Default for pipe mode.
+  --private       Private result, accessible by secret URL only.
+  --type VALUE    public or private.
+  --yes, -y       Do not ask for confirmation.
+HELP
+                exit 0
+                ;;
+            *)
+                ;;
+        esac
+        shift
+    done
+}
+
 # ============================================================
 # Dependency Check
 # ============================================================
@@ -111,7 +171,12 @@ check_deps() {
 
     if [ ${#missing[@]} -gt 0 ]; then
         warn "Missing: ${missing[*]}"
-        read -rp "Install missing dependencies? [Y/n] " install_choice
+        if ! is_interactive; then
+            install_choice="y"
+            warn "Non-interactive pipe detected; installing required dependencies automatically."
+        else
+            read -rp "Install missing dependencies? [Y/n] " install_choice
+        fi
         if [[ "${install_choice,,}" != "n" ]]; then
             for dep in "${missing[@]}"; do
                 install_pkg "$dep"
@@ -759,28 +824,43 @@ submit_benchmark() {
 # Main Flow
 # ============================================================
 main() {
+    parse_args "$@"
     print_banner
 
     check_deps
 
-    # Ask for benchmark type
-    echo ""
-    echo -e "${BOLD}Select benchmark type:${NC}"
-    echo "  1) Public  — Result is public, appears in rankings"
-    echo "  2) Private — Result is private, only accessible via secret URL"
-    echo ""
-    read -rp "Choice [1/2]: " choice
-    case "$choice" in
-        2) BENCHMARK_TYPE="private"; echo -e "${YELLOW}Private benchmark selected${NC}" ;;
-        *) BENCHMARK_TYPE="public"; echo -e "${GREEN}Public benchmark selected${NC}" ;;
-    esac
+    if [ -z "$BENCHMARK_TYPE" ]; then
+        if is_interactive; then
+            echo ""
+            echo -e "${BOLD}Select benchmark type:${NC}"
+            echo "  1) Public  — Result is public, appears in rankings"
+            echo "  2) Private — Result is private, only accessible via secret URL"
+            echo ""
+            read -rp "Choice [1/2, default 1]: " choice
+            BENCHMARK_TYPE="$(normalize_choice "$choice")"
+        else
+            BENCHMARK_TYPE="public"
+            warn "Non-interactive pipe detected; using public benchmark by default."
+            warn "For private results, run: curl -sL ${API_URL}/install | bash -s -- --private"
+        fi
+    fi
+
+    if [ "$BENCHMARK_TYPE" = "private" ]; then
+        echo -e "${YELLOW}Private benchmark selected${NC}"
+    else
+        echo -e "${GREEN}Public benchmark selected${NC}"
+    fi
 
     echo ""
     echo -e "${YELLOW}This will benchmark your system. Estimated time: 3-5 minutes.${NC}"
-    read -rp "Continue? [Y/n] " confirm
-    if [[ "${confirm,,}" == "n" ]]; then
-        echo "Cancelled."
-        exit 0
+    if is_interactive && [ "$ASSUME_YES" != "true" ]; then
+        read -rp "Continue? [Y/n] " confirm
+        if [[ "${confirm,,}" == "n" ]]; then
+            echo "Cancelled."
+            exit 0
+        fi
+    else
+        echo "Continuing automatically."
     fi
 
     # Run all benchmarks

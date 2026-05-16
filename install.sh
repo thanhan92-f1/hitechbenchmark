@@ -506,8 +506,10 @@ write_env_file() {
     write_env_line QUEUE_CONNECTION redis
     printf '\n'
     write_env_line NEXTAUTH_URL "$APP_URL"
+    write_env_line AUTH_URL "$APP_URL"
     write_env_line NEXTAUTH_SECRET "$NEXTAUTH_SECRET"
     write_env_line AUTH_SECRET "$AUTH_SECRET"
+    write_env_line AUTH_TRUST_HOST 'true'
     write_env_line BENCHMARK_SIGNING_SECRET "$BENCHMARK_SIGNING_SECRET"
     printf '\n'
     write_env_line NEXT_PUBLIC_SITE_URL "$APP_URL"
@@ -574,6 +576,7 @@ ensure_env_defaults() {
   awk '
     BEGIN {
       defaults["AI_MAX_TOKENS"]="1024";
+      defaults["AUTH_TRUST_HOST"]="true";
       defaults["AZURE_OPENAI_DEPLOYMENT"]="gpt-4o-mini";
       defaults["AZURE_OPENAI_API_VERSION"]="2024-10-21";
       defaults["GEOIP_PROVIDER"]="ipapi";

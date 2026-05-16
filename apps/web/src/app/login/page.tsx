@@ -59,7 +59,13 @@ function LoginContent() {
     setLoading(false)
 
     if (result?.error) {
-      if (result.error.includes('EMAIL_NOT_VERIFIED')) {
+      const authError = [
+        result.error,
+        (result as { code?: string }).code,
+        (result as { url?: string }).url,
+      ].filter(Boolean).join(' ')
+
+      if (authError.includes('EMAIL_NOT_VERIFIED')) {
         router.push(`/verify-email?email=${encodeURIComponent(email)}`)
       } else {
         setError('Invalid email or password')

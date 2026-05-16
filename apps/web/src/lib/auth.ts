@@ -1,4 +1,4 @@
-import NextAuth, { type NextAuthConfig } from 'next-auth'
+import NextAuth, { CredentialsSignin, type NextAuthConfig } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import Google from 'next-auth/providers/google'
 import GitHub from 'next-auth/providers/github'
@@ -13,8 +13,14 @@ const loginSchema = z.object({
   password: z.string().min(6),
 })
 
+class EmailNotVerifiedError extends CredentialsSignin {
+  code = 'EMAIL_NOT_VERIFIED'
+}
+
 const config: NextAuthConfig = {
   adapter: PrismaAdapter(db),
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+  trustHost: process.env.AUTH_TRUST_HOST !== 'false',
   providers: [
     // OAuth providers are included only when credentials are configured to prevent
     // NextAuth from throwing a configuration error when env vars are absent.
@@ -47,6 +53,7 @@ const config: NextAuthConfig = {
             password: true,
             role: true,
             isActive: true,
+            emailVerified: true,
             isEmailVerified: true,
             mfaTotpEnabled: true,
             mfaEmailEnabled: true,
@@ -67,8 +74,22 @@ const config: NextAuthConfig = {
 
         if (!passwordMatch) return null
 
-        if (!user.isEmailVerified) {
-          throw new Error('EMAIL_NOT_VERIFIED')
+        const legacySeedAdmin = user.email === 'admin@hitechbenchmark.com' && user.role === 'super_admin'
+        const emailVerified = user.isEmailVerified || Boolean(user.emailVerified)
+
+        if (!emailVerified) {
+          if (!legacySeedAdmin) {
+            throw new EmailNotVerifiedError()
+          }
+
+          await db.user.update({
+            where: { id: user.id },
+            data: {
+              isEmailVerified: true,
+              emailVerified: new Date(),
+              emailVerifiedAt: new Date(),
+            },
+          })
         }
 
         const mfaRequired = user.mfaTotpEnabled || user.mfaEmailEnabled
